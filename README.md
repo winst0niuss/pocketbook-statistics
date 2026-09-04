@@ -1,71 +1,101 @@
 # PocketBook Statistics
 
-Reading statistics for stock PocketBook e-readers. The firmware records what you
-read and when you last touched it; this app turns that into a stats screen,
-built from the firmware's own UI components.
-
-> Developed and tested on a **PocketBook Verse (PB629), firmware
-> U629.6.10.1461**. Other Allwinner **B288/B300** readers on Qt 6.8 firmware
-> should work, but none has been tried.
+Reading statistics for stock PocketBook e-readers. The firmware already records
+what you read and when you last touched it; this app turns that into a stats
+screen, built from the firmware's own UI components, so it looks like a part of
+the reader rather than a visitor.
 
 <p align="center">
-  <img src="docs/screenshots/overview.png" alt="Overview: current book, today, all books" width="245">
-  <img src="docs/screenshots/calendar.png" alt="Calendar: a month of covers" width="245">
-  <img src="docs/screenshots/day.png" alt="One day: what was read and for how long" width="245">
+  <img src="docs/screenshots/overview.png" alt="Overview: current book, today, all books" width="196">
+  <img src="docs/screenshots/calendar.png" alt="Calendar: a month of covers" width="196">
+  <img src="docs/screenshots/day.png" alt="One day: what was read and for how long" width="196">
+  <img src="docs/screenshots/info.png" alt="The info screen: streak, version, autostart" width="196">
 </p>
 
-<p align="center"><sub>Overview &middot; calendar &middot; one day's breakdown.
-Screenshots from a PB629 set to Russian; the app follows the device
-language.</sub></p>
+<p align="center"><sub>Overview, calendar, one day's breakdown, and the ⓘ
+screen. Taken on a PB629; the app follows the device language.</sub></p>
 
 ## What it shows
 
-- **Overview** — three sections. *Current book*: cover, progress, and how long
-  is left at your own measured pace. *Today*: minutes read and pages per hour.
-  *All books*: books finished and hours in total.
-- **Calendar** — a month at a time, each day carrying the cover of what you read
-  most. Tap a day for the breakdown, a book for its detail.
+**Overview.** The book in hand with its cover, how far through it you are, and
+how long is left at your own measured pace. Below it, today's minutes and pages
+per hour, then the all-time count of books finished and hours read. Tapping the
+cover or the title opens the book in the reader, and closing the book brings you
+straight back.
 
-Every figure is something that was measured. Nothing is inferred from the size
-of your library. The two all-time figures are the one exception you can make
-yourself: press and hold *books finished* or *total hours* to fold in reading
-this app never saw — an earlier device, the years before you installed it. What
-you add is kept apart from the measurements, so the pace, the calendar and the
-streak never move with it.
+**Calendar.** A month at a time. Each day carries the cover of whatever you read
+most that day, with a badge when there was more than one book. Tap a day for the
+breakdown, tap a book inside it for its own figures.
 
-The **ⓘ** in the header holds the version, the update button and one setting.
-The screens re-read their figures when you come back from a book, so what you
-just read is already there.
+**ⓘ.** Your current streak, the version, the update button, and one setting.
+
+Every figure here was measured. Nothing is guessed from the size of your
+library, and the screens re-read their numbers when you come back from a book,
+so what you just read is already on them.
+
+## Totals you can correct
+
+<p align="center">
+  <img src="docs/screenshots/edit-books.png" alt="Editing the number of books finished" width="245">
+  <img src="docs/screenshots/edit-hours.png" alt="Editing the total hours read" width="245">
+</p>
+
+The two all-time figures only count what this app saw on this reader. If you
+read for years before installing it, or on another device, press and hold
+**books finished** or **total hours** and set the number you want. The steps go
+in ones and tens, OK saves, the X leaves the card as it was.
+
+What you add is kept apart from the measurements and stored as a difference
+rather than as a total, so today's reading still adds to it. Nothing else moves:
+the pace, the calendar, the day panel and the streak stay exactly what they
+were.
+
+## The streak
+
+The ⓘ screen opens with the number of days you have read in a row. Tap that card
+and you get the year behind it.
+
+<p align="center">
+  <img src="docs/screenshots/streak.png" alt="The year as a grid of days, with the current and best streak" width="320">
+</p>
+
+The run you are on now, the longest one of this year, how many days of the year
+you read at all, and every day as a square: weekdays down, weeks across, January
+to June above July to December. Days from before you installed the app are drawn
+as empty outlines instead of as days without reading, because nothing was
+measuring then.
 
 ## How it works
 
-A daemon in the same binary reads the firmware's library database — read-only,
-every 30 seconds — and turns movements of your reading position into sessions.
-The firmware saves your position only every so often, so one stretch of clock
-can hold both the reading and the hours the cover lay shut: it is credited only
-as far as the pages turned across it make plausible — at most five minutes a
-page — and the time the reader spent asleep is subtracted before that.
-Jumping is not reading: following a footnote to the back of the book, or
-returning to a bookmark, buys neither minutes nor pages, and what you read from
-where you land is counted from there. Sessions split at local midnight, so one
-day's figures are that day's.
+A daemon inside the same binary reads the firmware's library database, read
+only, every 30 seconds, and turns movements of your reading position into
+sessions.
 
-Nothing starts at boot: the firmware has no place for that outside its own
-partition. Instead, ⓘ offers to track **from the moment a book opens** — the app
-registers itself as the handler for EPUB, FB2 and PDF, starts the daemon when
-you open a book and hands the book straight to the usual reader. With that off,
-open the app once after switching the reader on.
+The firmware saves your position only every so often, so a single stretch of
+clock can hold both the reading and the hours the cover lay shut. It is credited
+only as far as the pages turned across it make plausible, at most five minutes a
+page, and the time the reader spent asleep is subtracted first. Jumping is not
+reading either: following a footnote to the back of the book, or returning to a
+bookmark, buys neither minutes nor pages, and what you read from where you land
+is counted from there. Sessions are split at local midnight, so one day's
+figures are that day's.
+
+Nothing starts at boot, because the firmware has no place for that outside its
+own partition. Instead, ⓘ offers to track **from the moment a book opens**: the
+app registers itself as the handler for EPUB, FB2 and PDF, starts the daemon
+when you open a book, and hands the book straight to the usual reader. With that
+switch off, open the app once after switching the reader on.
 
 Time missed while the daemon was down is reconstructed from the firmware's
 timestamps, capped, and marked as an estimate: it counts toward total hours but
 never toward averages. Days before the install date are drawn as unknown rather
 than as days without reading. "Finished" always means the firmware's own *mark
-as read* flag.
+as read* flag, so it matches what the Library shows.
 
-Covers are extracted from the book files themselves — EPUB, FB2, CBZ — when the
-firmware's cache is wrong, and kept in the app's own cache, which is why a
-finished book still has a thumbnail after you delete the file. The interface
-follows the device language across 29 of them.
+Covers are extracted from the book files themselves, EPUB, FB2 and CBZ, when the
+firmware's cache is wrong or missing, and kept in the app's own cache. That is
+why a finished book still has a thumbnail after you delete the file. The
+interface follows the device language across 29 of them.
 
 If something goes wrong, `system/pocketbook-statistics/app.log` has it: the app
 and its daemon both write there, one line per event. The ⓘ screen shows the last
@@ -75,8 +105,16 @@ lines of it when an update fails; otherwise read the file over USB.
 
 Nothing is uploaded: no account, no telemetry. The app reads the firmware's
 database and writes its own files under `system/pocketbook-statistics/`. One
-request goes out, to `api.github.com`, and only when you press *Check for
+request ever goes out, to `api.github.com`, and only when you press *Check for
 update*.
+
+## Supported devices
+
+Developed and tested on a **PocketBook Verse (PB629), firmware
+U629.6.10.1461**. Other Allwinner **B288/B300** readers on Qt 6.8 firmware
+should work, but none has been tried. The binary links the Qt that is already on
+the reader, so firmware carrying a different version of it will not load the
+app.
 
 ## Install
 
@@ -96,19 +134,14 @@ reader. `make sdk` once, then `make qt`; `make test` runs the host-side tests.
 Details in [BUILDING.md](BUILDING.md), the firmware's data in
 [docs/DEVICE-DATA.md](docs/DEVICE-DATA.md).
 
-## Thanks
-
-To [nikljuel](https://github.com/nikljuel) for
-[better-stats](https://github.com/nikljuel/better-stats), which is where the
-idea came from: it showed that reading statistics on stock PocketBook firmware
-were possible at all. This app was written after studying how that one works,
-with the emphasis put elsewhere — its own session tracking, and a daemon that
-starts by itself when a book is opened.
-
 ## License
 
-MIT — see [LICENSE](LICENSE). Bundles [SQLite](https://www.sqlite.org/) and
+MIT, see [LICENSE](LICENSE). Bundles [SQLite](https://www.sqlite.org/) and
 [miniz](https://github.com/richgel999/miniz); cross-compilation builds on
 [fstanis/pocketbook-sdk-qt6](https://github.com/fstanis/pocketbook-sdk-qt6).
-Not affiliated with PocketBook — third-party software on your reader, at your
-own risk.
+
+## Disclaimer
+
+Not affiliated with PocketBook. Use at your own risk. It only reads the firmware
+database. Its optional configuration edits are backed up, but you are installing
+third-party software on your device.
