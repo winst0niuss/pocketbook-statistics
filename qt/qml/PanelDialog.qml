@@ -60,6 +60,11 @@ Item {
                     elide: Text.ElideRight
                 }
 
+                /* The X sits in a box of its own: a letter alone in the
+                 * corner reads as part of the title, and on e-ink there is no
+                 * hover to say otherwise. The frame is the affordance, the
+                 * inverted fill is the press, and the touch target stays
+                 * finger-sized around it. */
                 Item {
                     id: closeBox
                     anchors.right: parent.right
@@ -67,14 +72,30 @@ Item {
                     width: Global.dp(48)
                     height: Global.dp(48)
 
-                    StyledText {
+                    Rectangle {
                         anchors.centerIn: parent
-                        styledFont: FontStyles.Heading4
-                        color: GlobalValues.defaultTextColor
-                        text: "X"
+                        width: Global.dp(40)
+                        height: Global.dp(40)
+                        radius: GlobalValues.defaultElementBorderRadius
+                        color: closeArea.pressed ? GlobalValues.defaultTextColor
+                                                 : GlobalValues.defaultBackgroundColor
+                        border.width: Math.max(1, Math.round(
+                            GlobalValues.defaultSolidSeparatorThickness))
+                        border.color: GlobalValues.defaultTextColor
+
+                        StyledText {
+                            anchors.centerIn: parent
+                            styledFont: FontStyles.Body
+                            color: closeArea.pressed
+                                   ? GlobalValues.defaultBackgroundColor
+                                   : GlobalValues.defaultTextColor
+                            text: "X"
+                        }
                     }
 
                     MouseArea {
+                        id: closeArea
+
                         anchors.fill: parent
                         onClicked: dlg.visible = false
                     }

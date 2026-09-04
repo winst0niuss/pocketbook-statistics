@@ -28,7 +28,9 @@ var strings = {
     "calendar.monthSummary": "{n} {days} · {time}",
 
 
-    "edit.reset": "Қалпына келтіру",
+    "edit.ok": "ОК",
+    "edit.hoursTitle": "БАРЛЫҒЫ ОҚУ САҒАТЫ",
+    "edit.booksTitle": "БАРЛЫҒЫ ОҚЫЛҒАН КІТАП",
 
     "streak.currentCaption": "күн қатарынан",
     "streak.bestCaption": "{year} үздік серия",

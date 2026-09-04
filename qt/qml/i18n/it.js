@@ -31,7 +31,9 @@ var strings = {
     "calendar.monthSummary": "{n} {days} · {time}",
 
 
-    "edit.reset": "Reimposta",
+    "edit.ok": "OK",
+    "edit.hoursTitle": "ORE DI LETTURA IN TOTALE",
+    "edit.booksTitle": "LIBRI FINITI IN TOTALE",
 
     "streak.currentCaption": "giorni di fila ora",
     "streak.bestCaption": "serie migliore nel {year}",

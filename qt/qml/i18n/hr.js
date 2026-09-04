@@ -33,7 +33,9 @@ var strings = {
     "calendar.monthSummary": "{n} {days} · {time}",
 
 
-    "edit.reset": "Poništi",
+    "edit.ok": "OK",
+    "edit.hoursTitle": "UKUPNO SATI ČITANJA",
+    "edit.booksTitle": "UKUPNO PROČITANIH KNJIGA",
 
     "streak.currentCaption": "dana zaredom sada",
     "streak.bestCaption": "najbolja serija {year}",

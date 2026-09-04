@@ -32,7 +32,9 @@ var strings = {
     "calendar.monthSummary": "{n} {days} · {time}",
 
 
-    "edit.reset": "Obnovit",
+    "edit.ok": "OK",
+    "edit.hoursTitle": "CELKEM HODIN ČTENÍ",
+    "edit.booksTitle": "CELKEM PŘEČTENÝCH KNIH",
 
     "streak.currentCaption": "dní v řadě nyní",
     "streak.bestCaption": "nejlepší série v {year}",

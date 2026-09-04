@@ -28,7 +28,9 @@ var strings = {
     "calendar.monthSummary": "{n} {days} · {time}",
 
 
-    "edit.reset": "Herstellen",
+    "edit.ok": "OK",
+    "edit.hoursTitle": "LEESUREN IN TOTAAL",
+    "edit.booksTitle": "BOEKEN UITGELEZEN IN TOTAAL",
 
     "streak.currentCaption": "dagen op rij nu",
     "streak.bestCaption": "beste reeks in {year}",

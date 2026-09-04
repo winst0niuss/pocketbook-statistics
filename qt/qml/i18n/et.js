@@ -28,7 +28,9 @@ var strings = {
     "calendar.monthSummary": "{n} {days} · {time}",
 
 
-    "edit.reset": "Lähtesta",
+    "edit.ok": "OK",
+    "edit.hoursTitle": "LUGEMISTUNDE KOKKU",
+    "edit.booksTitle": "LOETUD RAAMATUID KOKKU",
 
     "streak.currentCaption": "päeva järjest",
     "streak.bestCaption": "parim seeria {year}",

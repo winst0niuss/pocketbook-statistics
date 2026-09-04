@@ -33,7 +33,9 @@ var strings = {
     "calendar.monthSummary": "{n} {days} · {time}",
 
 
-    "edit.reset": "Atstatyti",
+    "edit.ok": "OK",
+    "edit.hoursTitle": "IŠ VISO SKAITYMO VALANDŲ",
+    "edit.booksTitle": "IŠ VISO PERSKAITYTŲ KNYGŲ",
 
     "streak.currentCaption": "dienos iš eilės",
     "streak.bestCaption": "geriausia serija {year}",

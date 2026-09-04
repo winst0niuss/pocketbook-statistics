@@ -32,7 +32,9 @@ var strings = {
     "calendar.monthSummary": "{n} {days} · {time}",
 
 
-    "edit.reset": "Reset",
+    "edit.ok": "OK",
+    "edit.hoursTitle": "TOTAL HOURS READ",
+    "edit.booksTitle": "BOOKS FINISHED IN TOTAL",
 
     "streak.currentCaption": "days in a row now",
     "streak.bestCaption": "best streak in {year}",

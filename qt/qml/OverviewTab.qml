@@ -20,35 +20,30 @@ Item {
      * saw — before it was installed, or on another reader. What is stored is
      * the difference from the measurement, so today's reading still adds to
      * it, and nothing else on any screen moves. */
-    function editTotal(field, caption) {
+    function editTotal(field) {
         editor.field = field;
-        editor.title = caption;
-        editor.value = tab.measuredValue(field);
+        editor.title = field === "hours" ? Tr.t("edit.hoursTitle")
+                                         : Tr.t("edit.booksTitle");
+        editor.value = field === "hours" ? Math.round(ov.totalHours || 0)
+                                         : (ov.booksFinished || 0);
         editor.visible = true;
     }
 
-    function measuredValue(field) {
-        return field === "hours" ? Math.round(ov.totalHours || 0)
-                                 : (ov.booksFinished || 0);
+    /* The steps move the figure in the panel and nothing else. Nothing is
+     * written until OK: closing by the X or by the backdrop has to leave the
+     * card exactly as it was, or a panel opened out of curiosity would change
+     * the number. */
+    function stepTotal(by) {
+        editor.value = Math.max(0, editor.value + by);
     }
 
-    function applyTotal(next) {
-        editor.value = Math.max(0, next);
+    function commitTotal() {
         if (editor.field === "hours")
             stats.setTotalHours(editor.value);
         else
             stats.setBooksFinished(editor.value);
+        editor.visible = false;
         refresh();
-    }
-
-    /* Back to the measurement: a negative figure is what clears the offset. */
-    function resetTotal() {
-        if (editor.field === "hours")
-            stats.setTotalHours(-1);
-        else
-            stats.setBooksFinished(-1);
-        refresh();
-        editor.value = tab.measuredValue(editor.field);
     }
 
     /* Cover and title are a way back into the book. currentBook() only fills
@@ -138,7 +133,7 @@ Item {
 
             anchors.fill: parent
             enabled: card.field !== ""
-            onPressAndHold: tab.editTotal(card.field, card.caption)
+            onPressAndHold: tab.editTotal(card.field)
         }
 
         Column {
@@ -421,15 +416,15 @@ Item {
 
                     width: (parent.width - 3 * Global.dp(10)) / 4
                     text: (modelData > 0 ? "+" : "\u2212") + Math.abs(modelData)
-                    onClicked: tab.applyTotal(editor.value + modelData)
+                    onClicked: tab.stepTotal(modelData)
                 }
             }
         }
 
         StepButton {
             width: parent.width
-            text: Tr.t("edit.reset")
-            onClicked: tab.resetTotal()
+            text: Tr.t("edit.ok")
+            onClicked: tab.commitTotal()
         }
     }
 }

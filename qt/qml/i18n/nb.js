@@ -28,7 +28,9 @@ var strings = {
     "calendar.monthSummary": "{n} {days} · {time}",
 
 
-    "edit.reset": "Tilbakestill",
+    "edit.ok": "OK",
+    "edit.hoursTitle": "LESETIMER TOTALT",
+    "edit.booksTitle": "LESTE BØKER TOTALT",
 
     "streak.currentCaption": "dager på rad nå",
     "streak.bestCaption": "beste rekke {year}",

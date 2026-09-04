@@ -28,7 +28,9 @@ var strings = {
     "calendar.monthSummary": "{n} {days} · {time}",
 
 
-    "edit.reset": "Visszaállítás",
+    "edit.ok": "OK",
+    "edit.hoursTitle": "ÖSSZES OLVASOTT ÓRA",
+    "edit.booksTitle": "ÖSSZES BEFEJEZETT KÖNYV",
 
     "streak.currentCaption": "nap egymás után",
     "streak.bestCaption": "legjobb sorozat {year}",

@@ -33,7 +33,9 @@ var strings = {
     "calendar.monthSummary": "{n} {days} · {time}",
 
 
-    "edit.reset": "Resetare",
+    "edit.ok": "OK",
+    "edit.hoursTitle": "TOTAL ORE DE CITIT",
+    "edit.booksTitle": "TOTAL CĂRȚI TERMINATE",
 
     "streak.currentCaption": "zile la rând acum",
     "streak.bestCaption": "cea mai bună serie în {year}",

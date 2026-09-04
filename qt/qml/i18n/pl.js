@@ -36,7 +36,9 @@ var strings = {
     "calendar.monthSummary": "{n} {days} · {time}",
 
 
-    "edit.reset": "Przywróć",
+    "edit.ok": "OK",
+    "edit.hoursTitle": "ŁĄCZNIE GODZIN CZYTANIA",
+    "edit.booksTitle": "ŁĄCZNIE PRZECZYTANYCH KSIĄŻEK",
 
     "streak.currentCaption": "dni z rzędu teraz",
     "streak.bestCaption": "najlepsza seria w {year}",
