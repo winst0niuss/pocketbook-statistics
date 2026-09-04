@@ -56,9 +56,11 @@ Adjust `DEVICE` at the top of the `Makefile` to your reader's mount point
 make test
 ```
 
-Builds and runs `test/test_tracker.c` on the host — asserts covering the session
-derivation logic (idle capping, recovery/backfill, dedupe, page accounting). No
-device needed.
+Builds and runs `test/test_tracker.c` on the host. The asserts cover the
+session logic: how time is credited, page jumps, sleep, the split at midnight,
+recovery when the daemon was down, the reading streak and the hand-set totals.
+No device needed. `make test` also runs `tools/check_qml.py`, which catches QML
+mistakes that pass qmllint and then break the app on the device.
 
 ## Icons
 
@@ -74,13 +76,13 @@ make icons
 
 ```
 src/            shared C core (no Qt): tracker, stats DB, daemon
-qt/src/         Qt/C++: main, QML bridges, EPUB cover extraction, icon installer
+qt/src/         Qt/C++: main, QML bridges, cover extraction, icon installer
 qt/qml/         the UI (com.pocketbook.controls) + icons
 qt/qml/i18n/    one string catalog per language, driven by Tr.qml
 qt/third_party/ vendored sqlite3 + miniz (source only)
 third_party/    pocketbook-sdk-qt6 (fetched by `make sdk`, git-ignored)
 test/           host-side unit tests
-tools/          icon generator
+tools/          icon generator, QML checker
 ```
 
 ## How the pieces fit
@@ -90,9 +92,10 @@ tools/          icon generator
   `daemon.c` is the poll loop.
 - `qt/src/main.cpp` boots Qt against the device's plugins (QPA `pocketbook2`,
   software rendering), starts the daemon, and loads the QML scene.
-- `qt/src/stats_bridge.cpp` exposes the C stats to QML; `epub_cover.cpp` pulls
-  covers out of EPUBs with miniz; `installer.cpp` self-registers the launcher
-  icon on first run.
+- `qt/src/stats_bridge.cpp` exposes the C stats to QML; `book_cover.cpp` pulls
+  covers out of EPUB, FB2 and CBZ files with miniz; `installer.cpp` registers
+  the launcher icon on first run; `shim.cpp` installs the small script that
+  starts the daemon when a book is opened.
 - `qt/qml/` is the UI. Text goes through the `Tr` singleton; all
   spacing/colors come from the firmware's `GlobalValues`.
 
@@ -103,27 +106,42 @@ the hard constraints (softfp ABI, `rcc --no-zstd`, exact Qt version match).
 ## CI
 
 `.github/workflows/build.yml` runs the host tests on every push and builds the
-app in the SDK image. Every run uploads `PocketBookStatistics.zip` as a workflow artifact;
-pushing a tag that starts with `v` additionally publishes it as a GitHub
-release, so installing needs no local toolchain:
+app in the SDK image. Every run uploads `PocketBookStatistics.zip` as a workflow
+artifact.
+
+Pushing a tag that starts with `v` publishes that build as a GitHub release, so
+installing needs no local toolchain:
 
 ```bash
-git tag v0.1.0 && git push origin v0.1.0
+git tag v2.1.0 && git push origin v2.1.0
 ```
+
+The tag has to match `VERSION`, or the build fails on purpose: the in-app update
+check compares the release tag against the version compiled into the binary.
+
+A pull request can publish a build too, for testing on a real device. Set
+`VERSION` above the last release and every push to the branch is published as
+`vX.Y.Z-rcN`, a pre-release. `/releases/latest` ignores pre-releases, so only a
+device carrying the `system/pocketbook-statistics/prerelease` marker file is
+ever offered one. A branch that leaves `VERSION` alone publishes nothing.
 
 ## Translations
 
-Every catalog in `qt/qml/i18n/` is a plain `.js` file: a `strings` map keyed by
-the ids the QML uses, plus a `plural(n)` function returning the index into the
-`"plural.*"` form arrays (two forms for English and German, three for Russian).
-`{placeholder}` markers are filled in by `Tr.t(key, values)`; a catalog is free
-to ignore a placeholder its wording doesn't need.
+There are 29 catalogs in `qt/qml/i18n/`. Each is a plain `.js` file: a
+`strings` map keyed by the ids the QML uses, plus a `plural(n)` function
+returning the index into the `"plural.*"` form arrays (two forms for English,
+three for Russian, four for Slovenian). `{placeholder}` markers are filled in by
+`Tr.t(key, values)`, and a catalog may ignore a placeholder its wording does not
+need.
 
 To add a language, copy `en.js` to `<code>.js`, translate it, then:
 
 1. add `<file>i18n/<code>.js</file>` to `qt/qml/pocketbook-statistics.qrc`,
-2. add `import "i18n/<code>.js" as <Name>` and one `case "<code>": return <Name>;`
-   to `Tr.qml`.
+2. add `import "i18n/<code>.js" as <Name>` and one `"<code>": <Name>` row to the
+   `catalogs` table in `Tr.qml`,
+3. add a row to `kLauncherNames` in `qt/src/installer.cpp`: the launcher tile's
+   label is written before any QML engine exists, so it is the one user-facing
+   string outside the catalogs.
 
-Nothing else changes — call sites only ever name keys. Keys a catalog leaves
-out fall back to English, so a partial translation is usable.
+Nothing else changes, because call sites only ever name keys. Keys a catalog
+leaves out fall back to English, so a partial translation is usable.
