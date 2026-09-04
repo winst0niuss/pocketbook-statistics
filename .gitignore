@@ -1,0 +1,11 @@
+# Build output
+build/
+build-qt/
+
+# Fetched by `make sdk`
+/third_party/
+
+# macOS
+.DS_Store
+._*
+todo.md

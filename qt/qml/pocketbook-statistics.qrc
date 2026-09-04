@@ -1,0 +1,46 @@
+<RCC>
+    <qresource prefix="/">
+        <file>qmldir</file>
+        <file>Tr.qml</file>
+        <file>i18n/az.js</file>
+        <file>i18n/bg.js</file>
+        <file>i18n/cs.js</file>
+        <file>i18n/da.js</file>
+        <file>i18n/de.js</file>
+        <file>i18n/el.js</file>
+        <file>i18n/en.js</file>
+        <file>i18n/es.js</file>
+        <file>i18n/et.js</file>
+        <file>i18n/fi.js</file>
+        <file>i18n/fr.js</file>
+        <file>i18n/hr.js</file>
+        <file>i18n/hu.js</file>
+        <file>i18n/it.js</file>
+        <file>i18n/kk.js</file>
+        <file>i18n/lt.js</file>
+        <file>i18n/lv.js</file>
+        <file>i18n/nb.js</file>
+        <file>i18n/nl.js</file>
+        <file>i18n/pl.js</file>
+        <file>i18n/pt.js</file>
+        <file>i18n/ro.js</file>
+        <file>i18n/ru.js</file>
+        <file>i18n/sk.js</file>
+        <file>i18n/sl.js</file>
+        <file>i18n/sr.js</file>
+        <file>i18n/sv.js</file>
+        <file>i18n/tr.js</file>
+        <file>i18n/uk.js</file>
+        <file>main.qml</file>
+        <file>NavIcon.qml</file>
+        <file>PanelDialog.qml</file>
+        <file>BookDialog.qml</file>
+        <file>OverviewTab.qml</file>
+        <file>CalendarTab.qml</file>
+        <file>AboutTab.qml</file>
+        <file>StreakTab.qml</file>
+        <file>shim/open-book.sh</file>
+        <file>pocketbook-statistics.bmp</file>
+        <file>pocketbook-statistics_f.bmp</file>
+    </qresource>
+</RCC>
