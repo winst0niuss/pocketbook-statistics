@@ -28,6 +28,10 @@ var strings = {
     "calendar.monthSummary": "{n} {days} · {time}",
 
 
+    "edit.ok": "OK",
+    "edit.hoursTitle": "LÆSETIMER I ALT",
+    "edit.booksTitle": "LÆSTE BØGER I ALT",
+
     "streak.currentCaption": "dage i træk nu",
     "streak.bestCaption": "bedste stime {year}",
     "streak.readDaysCaption": "{n} {days} med læsning i {year}",

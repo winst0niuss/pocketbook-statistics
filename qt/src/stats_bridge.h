@@ -21,6 +21,17 @@ public:
      * per day from 1 January (0 not read, 1 read), beside the two streaks and
      * the day tracking started. */
     Q_INVOKABLE QVariantMap year(int y);
+    /* The two all-time figures on the Overview can be set by hand, for reading
+     * this app never saw — before it was installed, or on another reader. The
+     * argument is what the card should show; the difference from the measured
+     * figure is what gets stored, so later reading still adds to it. A negative
+     * value clears the adjustment and the card goes back to the measurement.
+     *
+     * Nothing else moves: the offsets live in `meta`, never in a session row,
+     * and are added in where these two cards are built and nowhere else. */
+    Q_INVOKABLE void setTotalHours(double hours);
+    Q_INVOKABLE void setBooksFinished(int books);
+
     /* Hands a book back to the firmware's reader. `path` is the `filePath` of
      * a currentBook() map — a file that was on disk when the map was built.
      * False means it is not there any more, or the firmware has no OpenBook;

@@ -174,6 +174,67 @@ static void test_streak(void)
     unlink(db_path);
 }
 
+/* The hand-set totals: an offset in `meta`, and nothing else moved.
+ *
+ * What the Overview does with the offset is C++ and has no host build, so what
+ * is checked here is the half that can be: the value survives a round trip,
+ * an absent key reads as no adjustment, and a stored offset leaves every
+ * measured figure exactly where it was. */
+static void test_manual_totals(void)
+{
+    const char *db_path = "/tmp/bs_test_totals.db";
+    unlink(db_path);
+    tracker t;
+    assert(tracker_init(&t, db_path, EXP_DB) == 0);
+    set_since(t.stats, "0");
+
+    const long noon = today_noon();
+    char sql[256];
+    snprintf(sql, sizeof(sql),
+             "INSERT INTO sessions (book_id,start_time,end_time,"
+             " active_seconds,pages_start,pages_end,recovered,pages_read)"
+             " VALUES (7,%ld,%ld,3600,1,30,0,29)", noon - 3600, noon);
+    ex(t.stats, sql);
+
+    overall_stats before;
+    assert(stats_overall(t.stats, &before) == 0);
+    assert(before.total_hours > 0.99 && before.total_hours < 1.01);
+
+    /* A key nobody wrote is no adjustment. */
+    assert(stats_meta_int(t.stats, META_OFFSET_SECONDS) == 0);
+    assert(stats_meta_int(t.stats, META_OFFSET_BOOKS) == 0);
+
+    /* Ten hours read on another device, and three books with them. */
+    assert(stats_meta_set_int(t.stats, META_OFFSET_SECONDS, 10 * 3600) == 0);
+    assert(stats_meta_set_int(t.stats, META_OFFSET_BOOKS, 3) == 0);
+    assert(stats_meta_int(t.stats, META_OFFSET_SECONDS) == 10 * 3600);
+    assert(stats_meta_int(t.stats, META_OFFSET_BOOKS) == 3);
+
+    /* The measurement is untouched: the offset is added where the card is
+     * built, and the pace, today and the streak never see it. */
+    overall_stats after;
+    assert(stats_overall(t.stats, &after) == 0);
+    assert(after.total_hours == before.total_hours);
+    assert(after.today_secs == before.today_secs);
+    assert(after.pages_per_min == before.pages_per_min);
+    assert(after.streak_days == before.streak_days);
+
+    /* Written twice is set, not summed — the dialog stores a target, not a
+     * stream of steps. */
+    assert(stats_meta_set_int(t.stats, META_OFFSET_SECONDS, 20 * 3600) == 0);
+    assert(stats_meta_int(t.stats, META_OFFSET_SECONDS) == 20 * 3600);
+
+    /* Reset is a zero, and it survives the reopen every catchUp() does. */
+    assert(stats_meta_set_int(t.stats, META_OFFSET_SECONDS, 0) == 0);
+    tracker_close(&t);
+    assert(tracker_init(&t, db_path, EXP_DB) == 0);
+    assert(stats_meta_int(t.stats, META_OFFSET_SECONDS) == 0);
+    assert(stats_meta_int(t.stats, META_OFFSET_BOOKS) == 3);
+
+    tracker_close(&t);
+    unlink(db_path);
+}
+
 /* Update check: tag names from GitHub releases against our own VERSION. */
 static void test_version_compare(void)
 {
@@ -648,6 +709,7 @@ int main(void)
     tracker_close(&jumper);
 
     test_streak();
+    test_manual_totals();
     test_version_compare();
 
     printf("all tracker tests ok\n");

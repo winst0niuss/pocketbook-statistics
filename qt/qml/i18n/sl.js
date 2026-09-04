@@ -35,6 +35,10 @@ var strings = {
     "calendar.monthSummary": "{n} {days} · {time}",
 
 
+    "edit.ok": "OK",
+    "edit.hoursTitle": "SKUPAJ UR BRANJA",
+    "edit.booksTitle": "SKUPAJ PREBRANIH KNJIG",
+
     "streak.currentCaption": "dni zapored zdaj",
     "streak.bestCaption": "najboljši niz v {year}",
     "streak.readDaysCaption": "{n} {days} branja v {year}",

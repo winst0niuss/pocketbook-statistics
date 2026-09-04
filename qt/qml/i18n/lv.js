@@ -32,6 +32,10 @@ var strings = {
     "calendar.monthSummary": "{n} {days} · {time}",
 
 
+    "edit.ok": "OK",
+    "edit.hoursTitle": "KOPĀ LASĪŠANAS STUNDU",
+    "edit.booksTitle": "KOPĀ IZLASĪTU GRĀMATU",
+
     "streak.currentCaption": "dienas pēc kārtas",
     "streak.bestCaption": "labākā sērija {year}",
     "streak.readDaysCaption": "{n} {days} ar lasīšanu {year}",

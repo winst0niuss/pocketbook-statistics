@@ -37,6 +37,10 @@ var strings = {
     "calendar.monthSummary": "{n} {days} · {time}",
 
 
+    "edit.ok": "ОК",
+    "edit.hoursTitle": "ВСЕГО ЧАСОВ ЧТЕНИЯ",
+    "edit.booksTitle": "ВСЕГО КНИГ ПРОЧИТАНО",
+
     "streak.currentCaption": "дней подряд сейчас",
     "streak.bestCaption": "лучшая серия в {year}",
     "streak.readDaysCaption": "{n} {days} чтения в {year}",

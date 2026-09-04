@@ -36,6 +36,10 @@ var strings = {
     "calendar.monthSummary": "{n} {days} · {time}",
 
 
+    "edit.ok": "ОК",
+    "edit.hoursTitle": "УСЬОГО ГОДИН ЧИТАННЯ",
+    "edit.booksTitle": "УСЬОГО КНИГ ПРОЧИТАНО",
+
     "streak.currentCaption": "днів поспіль зараз",
     "streak.bestCaption": "найкраща серія у {year}",
     "streak.readDaysCaption": "{n} {days} читання у {year}",

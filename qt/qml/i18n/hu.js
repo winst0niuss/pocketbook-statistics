@@ -28,6 +28,10 @@ var strings = {
     "calendar.monthSummary": "{n} {days} · {time}",
 
 
+    "edit.ok": "OK",
+    "edit.hoursTitle": "ÖSSZES OLVASOTT ÓRA",
+    "edit.booksTitle": "ÖSSZES BEFEJEZETT KÖNYV",
+
     "streak.currentCaption": "nap egymás után",
     "streak.bestCaption": "legjobb sorozat {year}",
     "streak.readDaysCaption": "{n} {days} olvasás {year} évben",

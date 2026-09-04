@@ -28,6 +28,10 @@ var strings = {
     "calendar.monthSummary": "{n} {days} · {time}",
 
 
+    "edit.ok": "OK",
+    "edit.hoursTitle": "ÜMUMİ OXU SAATI",
+    "edit.booksTitle": "ÜMUMİ BİTİRİLƏN KİTAB",
+
     "streak.currentCaption": "gün ardıcıl",
     "streak.bestCaption": "{year} ən yaxşı seriya",
     "streak.readDaysCaption": "{year} ildə {n} {days} oxu",

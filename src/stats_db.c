@@ -115,6 +115,34 @@ int stats_year_days(sqlite3 *db, int year, unsigned char *days, int count)
     return n;
 }
 
+int64_t stats_meta_int(sqlite3 *db, const char *key)
+{
+    sqlite3_stmt *st = NULL;
+    int64_t v = 0;
+    if (sqlite3_prepare_v2(db, "SELECT value FROM meta WHERE key = ?1", -1, &st,
+                           NULL) == SQLITE_OK) {
+        sqlite3_bind_text(st, 1, key, -1, SQLITE_STATIC);
+        if (sqlite3_step(st) == SQLITE_ROW)
+            v = sqlite3_column_int64(st, 0);
+    }
+    sqlite3_finalize(st);
+    return v;
+}
+
+int stats_meta_set_int(sqlite3 *db, const char *key, int64_t value)
+{
+    sqlite3_stmt *st = NULL;
+    if (sqlite3_prepare_v2(db,
+                           "INSERT OR REPLACE INTO meta (key,value) VALUES (?1,?2)",
+                           -1, &st, NULL) != SQLITE_OK)
+        return -1;
+    sqlite3_bind_text(st, 1, key, -1, SQLITE_STATIC);
+    sqlite3_bind_int64(st, 2, value);
+    const int rc = sqlite3_step(st);
+    sqlite3_finalize(st);
+    return rc == SQLITE_DONE ? 0 : -1;
+}
+
 int64_t stats_tracking_since(sqlite3 *db)
 {
     return (int64_t)q_double(db,

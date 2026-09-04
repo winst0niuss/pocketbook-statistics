@@ -28,6 +28,10 @@ var strings = {
     "calendar.monthSummary": "{n} {days} · {time}",
 
 
+    "edit.ok": "OK",
+    "edit.hoursTitle": "ΣΥΝΟΛΟ ΩΡΩΝ ΑΝΑΓΝΩΣΗΣ",
+    "edit.booksTitle": "ΣΥΝΟΛΟ ΒΙΒΛΙΩΝ ΠΟΥ ΔΙΑΒΑΣΤΗΚΑΝ",
+
     "streak.currentCaption": "μέρες στη σειρά",
     "streak.bestCaption": "καλύτερο σερί το {year}",
     "streak.readDaysCaption": "{n} {days} ανάγνωσης το {year}",

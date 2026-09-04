@@ -28,6 +28,17 @@ int stats_streak_days(sqlite3 *db);
  * holds at least a minute of tracked reading. `count` is 365 or 366; anything
  * the year does not have is left alone. Returns the number of days marked. */
 int stats_year_days(sqlite3 *db, int year, unsigned char *days, int count);
+/* Hand-set adjustments to the two all-time figures on the Overview, in `meta`
+ * and never in the session rows: the pace, the averages, the calendar and the
+ * streak are measurements and must not move with them. Reading done before the
+ * app was installed, or on another device, is what they are for. A key that
+ * was never written reads as 0, which is the un-adjusted case. */
+#define META_OFFSET_SECONDS "manual_offset_seconds"
+#define META_OFFSET_BOOKS "manual_offset_books"
+int64_t stats_meta_int(sqlite3 *db, const char *key);
+/* 0 on success. */
+int stats_meta_set_int(sqlite3 *db, const char *key, int64_t value);
+
 /* Total time + speed for a book (speed <= 0 if unknown). */
 void stats_book(sqlite3 *db, int64_t bookid, int64_t *secs, double *pages_per_min);
 
