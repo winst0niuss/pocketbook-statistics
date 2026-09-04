@@ -6,32 +6,54 @@ screen, built from the firmware's own UI components, so it looks like a part of
 the reader rather than a visitor.
 
 <p align="center">
-  <img src="docs/screenshots/overview.png" alt="Overview: current book, today, all books" width="196">
-  <img src="docs/screenshots/calendar.png" alt="Calendar: a month of covers" width="196">
-  <img src="docs/screenshots/day.png" alt="One day: what was read and for how long" width="196">
-  <img src="docs/screenshots/info.png" alt="The info screen: streak, version, autostart" width="196">
+  <img src="docs/screenshots/overview.png" alt="Overview: current book, today, all books" width="300">
 </p>
 
-<p align="center"><sub>Overview, calendar, one day's breakdown, and the ⓘ
-screen. Taken on a PB629; the app follows the device language.</sub></p>
+<p align="center"><sub>The overview on a PB629. The app follows the device
+language.</sub></p>
 
-## What it shows
+## Overview
 
-**Overview.** The book in hand with its cover, how far through it you are, and
-how long is left at your own measured pace. Below it, today's minutes and pages
-per hour, then the all-time count of books finished and hours read. Tapping the
-cover or the title opens the book in the reader, and closing the book brings you
-straight back.
+The book in hand with its cover, how far through it you are, and how long is
+left at your own measured pace. Below it, today's minutes and pages per hour,
+then the all-time count of books finished and hours read.
 
-**Calendar.** A month at a time. Each day carries the cover of whatever you read
-most that day, with a badge when there was more than one book. Tap a day for the
-breakdown, tap a book inside it for its own figures.
+Tapping the cover or the title opens the book in the reader, and closing the
+book brings you straight back here.
 
-**ⓘ.** Your current streak, the version, the update button, and one setting.
+Every figure was measured. Nothing is guessed from the size of your library, and
+the screens re-read their numbers when you return from a book, so what you just
+read is already on them.
 
-Every figure here was measured. Nothing is guessed from the size of your
-library, and the screens re-read their numbers when you come back from a book,
-so what you just read is already on them.
+## Calendar
+
+<p align="center">
+  <img src="docs/screenshots/calendar.png" alt="Calendar: a month of covers" width="245">
+  <img src="docs/screenshots/day.png" alt="One day: what was read and for how long" width="245">
+</p>
+
+A month at a time. Each day carries the cover of whatever you read most that
+day, and a badge when there was more than one book. The heading counts the days
+you read and the hours they came to.
+
+Tap a day and the panel lists what was open that day and for how long. Tap a
+book inside it for its own figures.
+
+## The streak
+
+<p align="center">
+  <img src="docs/screenshots/info.png" alt="The info screen, opening with the streak" width="245">
+  <img src="docs/screenshots/streak.png" alt="The year as a grid of days, with the current and best streak" width="245">
+</p>
+
+The ⓘ screen opens with the number of days you have read in a row. Tap that card
+and you get the year behind it: the run you are on now, the longest one of this
+year, how many days of the year you read at all, and every day as a square, in
+the shape a contribution graph has. Weekdays down, weeks across, January to June
+above July to December.
+
+Days from before you installed the app are drawn as empty outlines instead of as
+days without reading, because nothing was measuring then.
 
 ## Totals you can correct
 
@@ -49,21 +71,6 @@ What you add is kept apart from the measurements and stored as a difference
 rather than as a total, so today's reading still adds to it. Nothing else moves:
 the pace, the calendar, the day panel and the streak stay exactly what they
 were.
-
-## The streak
-
-The ⓘ screen opens with the number of days you have read in a row. Tap that card
-and you get the year behind it.
-
-<p align="center">
-  <img src="docs/screenshots/streak.png" alt="The year as a grid of days, with the current and best streak" width="320">
-</p>
-
-The run you are on now, the longest one of this year, how many days of the year
-you read at all, and every day as a square: weekdays down, weeks across, January
-to June above July to December. Days from before you installed the app are drawn
-as empty outlines instead of as days without reading, because nothing was
-measuring then.
 
 ## How it works
 
