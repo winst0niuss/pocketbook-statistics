@@ -28,6 +28,8 @@ var strings = {
     "calendar.monthSummary": "{n} {days} · {time}",
 
 
+    "edit.reset": "Palauta",
+
     "streak.currentCaption": "päivää putkeen nyt",
     "streak.bestCaption": "paras putki {year}",
     "streak.readDaysCaption": "{n} {days} lukemista vuonna {year}",

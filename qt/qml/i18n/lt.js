@@ -33,6 +33,8 @@ var strings = {
     "calendar.monthSummary": "{n} {days} · {time}",
 
 
+    "edit.reset": "Atstatyti",
+
     "streak.currentCaption": "dienos iš eilės",
     "streak.bestCaption": "geriausia serija {year}",
     "streak.readDaysCaption": "{n} {days} su skaitymu {year}",

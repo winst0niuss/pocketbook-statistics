@@ -28,6 +28,8 @@ var strings = {
     "calendar.monthSummary": "{n} {days} · {time}",
 
 
+    "edit.reset": "Visszaállítás",
+
     "streak.currentCaption": "nap egymás után",
     "streak.bestCaption": "legjobb sorozat {year}",
     "streak.readDaysCaption": "{n} {days} olvasás {year} évben",

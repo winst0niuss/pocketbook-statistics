@@ -32,6 +32,8 @@ var strings = {
     "calendar.monthSummary": "{n} {days} · {time}",
 
 
+    "edit.reset": "Atiestatīt",
+
     "streak.currentCaption": "dienas pēc kārtas",
     "streak.bestCaption": "labākā sērija {year}",
     "streak.readDaysCaption": "{n} {days} ar lasīšanu {year}",

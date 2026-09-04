@@ -367,14 +367,19 @@ QVariantMap StatsBridge::overall()
      * which reads as a broken counter. The same number as 6 pages an hour
      * reads as a fact. */
     m[QStringLiteral("pagesPerHour")] = o.pages_per_min * 60.0;
-    m[QStringLiteral("totalHours")] = o.total_hours;
     /* The Overview shows what was measured, and only that: minutes today, the
      * pace behind them, books finished ever and hours in total. The ring that
      * used to sit here answered a different question — how much of the shelf
      * currently on the device has been read — and with it goes the query that
      * fed it, which was the one place this call touched the firmware library. */
     m[QStringLiteral("todaySecs")] = o.today_secs;
-    m[QStringLiteral("booksFinished")] = finishedBooks(false).size();
+    /* The two all-time figures, and the only two the hand-set offsets touch.
+     * Today's minutes, the pace and everything the other screens show stay as
+     * they were measured. */
+    m[QStringLiteral("totalHours")] =
+        o.total_hours + stats_meta_int(db_, META_OFFSET_SECONDS) / 3600.0;
+    m[QStringLiteral("booksFinished")] =
+        finishedBooks(false).size() + int(stats_meta_int(db_, META_OFFSET_BOOKS));
     /* Days in a row, for the line the About screen opens with. */
     m[QStringLiteral("streakDays")] = o.streak_days;
 
@@ -619,6 +624,35 @@ QVariantMap StatsBridge::year(int y)
     m[QStringLiteral("trackingSince")] = sinceDate.isValid()
         ? sinceDate.toString(QStringLiteral("dd.MM.yyyy")) : QString();
     return m;
+}
+
+/* An offset, never a measurement: what is stored is the difference between the
+ * figure the card should show and the one that was measured, so a session
+ * recorded tomorrow still adds to the total. Clearing is a negative argument
+ * rather than a call of its own — the dialog's reset button is the same button
+ * as its steps, one call away either way.
+ *
+ * Rounded to the second, because that is what the column holds and a total of
+ * "282.4 hours" is not a figure anybody typed. */
+void StatsBridge::setTotalHours(double hours)
+{
+    if (hours < 0) {
+        stats_meta_set_int(db_, META_OFFSET_SECONDS, 0);
+        return;
+    }
+    overall_stats o;
+    stats_overall(db_, &o);
+    stats_meta_set_int(db_, META_OFFSET_SECONDS,
+                       qRound64((hours - o.total_hours) * 3600.0));
+}
+
+void StatsBridge::setBooksFinished(int books)
+{
+    if (books < 0) {
+        stats_meta_set_int(db_, META_OFFSET_BOOKS, 0);
+        return;
+    }
+    stats_meta_set_int(db_, META_OFFSET_BOOKS, books - finishedBooks(false).size());
 }
 
 /* The Overview's book card is a shortcut back into the reader. Nothing here

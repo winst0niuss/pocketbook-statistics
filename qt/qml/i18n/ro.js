@@ -33,6 +33,8 @@ var strings = {
     "calendar.monthSummary": "{n} {days} · {time}",
 
 
+    "edit.reset": "Resetare",
+
     "streak.currentCaption": "zile la rând acum",
     "streak.bestCaption": "cea mai bună serie în {year}",
     "streak.readDaysCaption": "{n} {days} de citit în {year}",

@@ -28,6 +28,8 @@ var strings = {
     "calendar.monthSummary": "{n} {days} · {time}",
 
 
+    "edit.reset": "Қалпына келтіру",
+
     "streak.currentCaption": "күн қатарынан",
     "streak.bestCaption": "{year} үздік серия",
     "streak.readDaysCaption": "{year} жылы {n} {days} оқу",

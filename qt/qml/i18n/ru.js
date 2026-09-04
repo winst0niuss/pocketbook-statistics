@@ -37,6 +37,8 @@ var strings = {
     "calendar.monthSummary": "{n} {days} · {time}",
 
 
+    "edit.reset": "Сбросить",
+
     "streak.currentCaption": "дней подряд сейчас",
     "streak.bestCaption": "лучшая серия в {year}",
     "streak.readDaysCaption": "{n} {days} чтения в {year}",

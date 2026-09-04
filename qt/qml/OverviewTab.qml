@@ -16,6 +16,41 @@ Item {
         book = stats.currentBook();
     }
 
+    /* The two all-time figures can be set by hand, for reading this app never
+     * saw — before it was installed, or on another reader. What is stored is
+     * the difference from the measurement, so today's reading still adds to
+     * it, and nothing else on any screen moves. */
+    function editTotal(field, caption) {
+        editor.field = field;
+        editor.title = caption;
+        editor.value = tab.measuredValue(field);
+        editor.visible = true;
+    }
+
+    function measuredValue(field) {
+        return field === "hours" ? Math.round(ov.totalHours || 0)
+                                 : (ov.booksFinished || 0);
+    }
+
+    function applyTotal(next) {
+        editor.value = Math.max(0, next);
+        if (editor.field === "hours")
+            stats.setTotalHours(editor.value);
+        else
+            stats.setBooksFinished(editor.value);
+        refresh();
+    }
+
+    /* Back to the measurement: a negative figure is what clears the offset. */
+    function resetTotal() {
+        if (editor.field === "hours")
+            stats.setTotalHours(-1);
+        else
+            stats.setBooksFinished(-1);
+        refresh();
+        editor.value = tab.measuredValue(editor.field);
+    }
+
     /* Cover and title are a way back into the book. currentBook() only fills
      * filePath while the file is still on the device, so a book that was read
      * and then deleted simply is not tappable — there is nothing to open. */
@@ -82,18 +117,35 @@ Item {
     /* One figure over its caption, framed. Both rows use it, so both rows
      * agree on width, height and where the text sits. */
     component StatCard: Item {
+        id: card
+
         property string value: ""
         property string caption: ""
+        /* "hours" or "books" on the two all-time cards, empty on the rest: a
+         * figure about today is not one you get to overrule. */
+        property string field: ""
 
         width: tab.cardWidth
         height: Global.dp(92)
 
         Card { anchors.fill: parent }
 
+        /* A long press, not a tap: these cards are read far more often than
+         * they are edited, and a tap that opened an editor would be a trap.
+         * Pressing dims the card, so the hold reads as doing something. */
+        MouseArea {
+            id: hold
+
+            anchors.fill: parent
+            enabled: card.field !== ""
+            onPressAndHold: tab.editTotal(card.field, card.caption)
+        }
+
         Column {
             anchors.centerIn: parent
             width: parent.width - 2 * Global.dp(10)
             spacing: Global.dp(2)
+            opacity: hold.pressed ? 0.5 : 1.0
 
             StyledText {
                 anchors.horizontalCenter: parent.horizontalCenter
@@ -114,6 +166,39 @@ Item {
                 maximumLineCount: 2
                 elide: Text.ElideRight
             }
+        }
+    }
+
+    /* A step, not a keyboard: the firmware's numeric input is not something a
+     * Qt scene can raise, and a total is reached in ones and tens anyway. */
+    component StepButton: Rectangle {
+        id: step
+
+        property alias text: stepLabel.text
+
+        signal clicked()
+
+        height: Global.dp(52)
+        radius: GlobalValues.defaultElementBorderRadius
+        color: press.pressed ? GlobalValues.defaultTextColor
+                             : GlobalValues.defaultBackgroundColor
+        border.width: tab.hairline
+        border.color: GlobalValues.defaultTextColor
+
+        StyledText {
+            id: stepLabel
+
+            anchors.centerIn: parent
+            styledFont: FontStyles.Body
+            color: press.pressed ? GlobalValues.defaultBackgroundColor
+                                 : GlobalValues.defaultTextColor
+        }
+
+        MouseArea {
+            id: press
+
+            anchors.fill: parent
+            onClicked: step.clicked()
         }
     }
 
@@ -284,6 +369,7 @@ Item {
 
             StatCard {
                 readonly property int books: tab.ov.booksFinished || 0
+                field: "books"
                 value: books + ""
                 caption: Tr.has("plural.booksFinished")
                          ? Tr.plural("plural.booksFinished", books)
@@ -291,6 +377,7 @@ Item {
             }
 
             StatCard {
+                field: "hours"
                 /* Whole hours once there are enough to round without losing
                  * anything; a tenth while the figure is still small. */
                 value: (tab.ov.totalHours || 0) >= 10
@@ -302,6 +389,47 @@ Item {
                          ? Tr.plural("plural.totalHours", Math.round(tab.ov.totalHours || 0))
                          : Tr.t("overview.totalHours")
             }
+        }
+    }
+
+    /* Held open over the Overview: the figure as it stands, four steps, and
+     * the way back to the measurement. Every step writes at once — there is no
+     * "save" to forget, and the card behind the panel follows along. */
+    PanelDialog {
+        id: editor
+
+        property string field: ""
+        property int value: 0
+
+        StyledText {
+            anchors.horizontalCenter: parent.horizontalCenter
+            styledFont: FontStyles.Heading2
+            font.family: tab.serif
+            color: GlobalValues.defaultTextColor
+            text: editor.value + ""
+        }
+
+        Row {
+            width: parent.width
+            spacing: Global.dp(10)
+
+            Repeater {
+                model: [-10, -1, 1, 10]
+
+                StepButton {
+                    required property int modelData
+
+                    width: (parent.width - 3 * Global.dp(10)) / 4
+                    text: (modelData > 0 ? "+" : "\u2212") + Math.abs(modelData)
+                    onClicked: tab.applyTotal(editor.value + modelData)
+                }
+            }
+        }
+
+        StepButton {
+            width: parent.width
+            text: Tr.t("edit.reset")
+            onClicked: tab.resetTotal()
         }
     }
 }

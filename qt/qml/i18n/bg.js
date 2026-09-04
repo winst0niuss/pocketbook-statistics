@@ -28,6 +28,8 @@ var strings = {
     "calendar.monthSummary": "{n} {days} · {time}",
 
 
+    "edit.reset": "Нулиране",
+
     "streak.currentCaption": "дни поред сега",
     "streak.bestCaption": "най-добра серия през {year}",
     "streak.readDaysCaption": "{n} {days} с четене през {year}",

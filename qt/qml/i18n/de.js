@@ -32,6 +32,8 @@ var strings = {
     "calendar.monthSummary": "{n} {days} · {time}",
 
 
+    "edit.reset": "Zurücksetzen",
+
     "streak.currentCaption": "Tage am Stück",
     "streak.bestCaption": "beste Serie {year}",
     "streak.readDaysCaption": "{n} {days} mit Lesen in {year}",

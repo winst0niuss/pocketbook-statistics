@@ -33,6 +33,8 @@ var strings = {
     "calendar.monthSummary": "{n} {days} · {time}",
 
 
+    "edit.reset": "Поништи",
+
     "streak.currentCaption": "дана заредом сада",
     "streak.bestCaption": "најбоља серија {year}",
     "streak.readDaysCaption": "{n} {days} читања у {year}",

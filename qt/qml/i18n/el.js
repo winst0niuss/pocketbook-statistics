@@ -28,6 +28,8 @@ var strings = {
     "calendar.monthSummary": "{n} {days} · {time}",
 
 
+    "edit.reset": "Επαναφορά",
+
     "streak.currentCaption": "μέρες στη σειρά",
     "streak.bestCaption": "καλύτερο σερί το {year}",
     "streak.readDaysCaption": "{n} {days} ανάγνωσης το {year}",

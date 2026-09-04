@@ -32,6 +32,8 @@ var strings = {
     "calendar.monthSummary": "{n} {days} · {time}",
 
 
+    "edit.reset": "Obnovit",
+
     "streak.currentCaption": "dní v řadě nyní",
     "streak.bestCaption": "nejlepší série v {year}",
     "streak.readDaysCaption": "{n} {days} čtení v {year}",

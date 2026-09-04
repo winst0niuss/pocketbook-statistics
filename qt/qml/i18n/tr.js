@@ -28,6 +28,8 @@ var strings = {
     "calendar.monthSummary": "{n} {days} · {time}",
 
 
+    "edit.reset": "Sıfırla",
+
     "streak.currentCaption": "gün üst üste",
     "streak.bestCaption": "{year} en iyi seri",
     "streak.readDaysCaption": "{year} yılında {n} {days} okuma",

@@ -35,6 +35,8 @@ var strings = {
     "calendar.monthSummary": "{n} {days} · {time}",
 
 
+    "edit.reset": "Ponastavi",
+
     "streak.currentCaption": "dni zapored zdaj",
     "streak.bestCaption": "najboljši niz v {year}",
     "streak.readDaysCaption": "{n} {days} branja v {year}",

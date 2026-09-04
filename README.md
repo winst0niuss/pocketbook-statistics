@@ -27,7 +27,11 @@ language.</sub></p>
   most. Tap a day for the breakdown, a book for its detail.
 
 Every figure is something that was measured. Nothing is inferred from the size
-of your library.
+of your library. The two all-time figures are the one exception you can make
+yourself: press and hold *books finished* or *total hours* to fold in reading
+this app never saw — an earlier device, the years before you installed it. What
+you add is kept apart from the measurements, so the pace, the calendar and the
+streak never move with it.
 
 The **ⓘ** in the header holds the version, the update button and one setting.
 The screens re-read their figures when you come back from a book, so what you

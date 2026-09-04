@@ -36,6 +36,8 @@ var strings = {
     "calendar.monthSummary": "{n} {days} · {time}",
 
 
+    "edit.reset": "Скинути",
+
     "streak.currentCaption": "днів поспіль зараз",
     "streak.bestCaption": "найкраща серія у {year}",
     "streak.readDaysCaption": "{n} {days} читання у {year}",

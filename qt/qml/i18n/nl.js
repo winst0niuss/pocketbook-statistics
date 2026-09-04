@@ -28,6 +28,8 @@ var strings = {
     "calendar.monthSummary": "{n} {days} · {time}",
 
 
+    "edit.reset": "Herstellen",
+
     "streak.currentCaption": "dagen op rij nu",
     "streak.bestCaption": "beste reeks in {year}",
     "streak.readDaysCaption": "{n} {days} gelezen in {year}",
