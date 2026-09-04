@@ -129,7 +129,7 @@ jobs:
             --title "$TAG (PR #$PR)" \
             --notes "Device build of #$PR at \`${HEAD_SHA:0:7}\`, merged into \`main\`. A pre-release: only a reader carrying the \`prerelease\` marker file is ever offered it."
           gh pr comment "$PR" --body \
-            "Device build published as [\`$TAG\`](https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG) — the reader with the \`prerelease\` marker will find it under ⓘ → *Check for update*."
+            "Device build published as [$TAG](https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG)"
 
       - name: Release
         if: startsWith(github.ref, 'refs/tags/v')
