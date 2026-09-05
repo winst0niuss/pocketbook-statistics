@@ -23,6 +23,22 @@ int run_daemon(void);
 void spawn_daemon(const char *self);
 const char *stats_db_path(void);
 const char *explorer_db_path(void);
+/* Where the pidfile is, and where to look up what a pid actually is. Both are
+ * fixed on the device and overridable by environment variable, the same way the
+ * two database paths are: it is what lets the host tests drive the liveness
+ * check, and that check decides whether the day gets measured at all.
+ * POCKETBOOK_STATISTICS_PIDFILE, POCKETBOOK_STATISTICS_PROC. */
+const char *pidfile_path(void);
+const char *proc_dir_path(void);
+/* 1 if the pidfile names a process that is one of our daemons. The app and the
+ * daemon reach it through spawn_daemon/run_daemon; it is declared here for the
+ * tests. */
+int daemon_alive(void);
+/* Records the marks a daemon leaves while it lives, and logs what the previous
+ * run reached. Called at the top of run_daemon(), and a function of its own
+ * because the poll loop it sits in never returns. */
+struct sqlite3;
+void daemon_note_start(struct sqlite3 *stats);
 
 #ifdef __cplusplus
 }

@@ -32,6 +32,18 @@ const char *explorer_db_path(void)
     return p ? p : EXPLORER_DB;
 }
 
+const char *pidfile_path(void)
+{
+    const char *p = getenv("POCKETBOOK_STATISTICS_PIDFILE");
+    return p ? p : PIDFILE;
+}
+
+const char *proc_dir_path(void)
+{
+    const char *p = getenv("POCKETBOOK_STATISTICS_PROC");
+    return p ? p : "/proc";
+}
+
 /* 1 if a daemon of ours is already running.
  *
  * `kill(pid, 0)` is not enough on this device. The pidfile survives a reboot,
@@ -50,9 +62,9 @@ const char *explorer_db_path(void)
  * zombie, whose cmdline is empty and which polls nothing. procfs is there on
  * this firmware: the startup measurement reads /proc/self/stat and the shim
  * has always read /proc/<pid>. */
-static int daemon_alive(void)
+int daemon_alive(void)
 {
-    FILE *f = fopen(PIDFILE, "r");
+    FILE *f = fopen(pidfile_path(), "r");
     if (!f)
         return 0;
     int pid = 0;
@@ -62,8 +74,8 @@ static int daemon_alive(void)
     if (pid <= 0 || kill(pid, 0) != 0)
         return 0;
 
-    char path[64];
-    snprintf(path, sizeof(path), "/proc/%d/cmdline", pid);
+    char path[280];
+    snprintf(path, sizeof(path), "%s/%d/cmdline", proc_dir_path(), pid);
     FILE *c = fopen(path, "r");
     if (!c) {
         pb_log("daemon: cannot read %s, treating pid %d as gone", path, pid);
@@ -86,11 +98,39 @@ static int daemon_alive(void)
 
 static void write_pidfile(void)
 {
-    FILE *f = fopen(PIDFILE, "w");
+    FILE *f = fopen(pidfile_path(), "w");
     if (f) {
         fprintf(f, "%d\n", (int)getpid());
         fclose(f);
     }
+}
+
+/* Reads what the run before this one got to, says it, and starts fresh marks
+ * for this one. The daemon regularly disappears between app launches without
+ * logging a stop, which means SIGKILL, which cannot be caught — so the only way
+ * to learn anything about it is to leave marks behind while alive and read them
+ * on the way back up. A run that ended cleanly logs its signal as well, and
+ * then the two lines agree.
+ *
+ * A function of its own because the poll loop it sits in never returns, and a
+ * test has to be able to drive it. */
+void daemon_note_start(sqlite3 *stats)
+{
+    const int64_t now = (int64_t)time(NULL);
+    const int64_t prev_start = stats_meta_int(stats, META_DAEMON_STARTED);
+    if (prev_start > 0) {
+        const int64_t prev_last = stats_meta_int(stats, META_DAEMON_LAST_POLL);
+        /* "At least", because the marks are written once a heartbeat and the
+         * run ended somewhere after the last one. */
+        pb_log("daemon: previous run lived at least %d s, %d polls, last mark "
+               "%d s before this start",
+               (int)(prev_last - prev_start),
+               (int)stats_meta_int(stats, META_DAEMON_POLLS),
+               (int)(now - prev_last));
+    }
+    stats_meta_set_int(stats, META_DAEMON_STARTED, now);
+    stats_meta_set_int(stats, META_DAEMON_LAST_POLL, now);
+    stats_meta_set_int(stats, META_DAEMON_POLLS, 0);
 }
 
 int run_daemon(void)
@@ -118,25 +158,7 @@ int run_daemon(void)
     }
     pb_log("daemon: started (pid %d)", (int)getpid());
 
-    /* What the run before this one got to. The daemon regularly disappears
-     * between app launches without logging a stop, which means SIGKILL, which
-     * cannot be caught — so the only way to learn anything about it is to leave
-     * marks behind while alive and read them on the way back up. A run that
-     * ended cleanly logs its signal as well, and then these two lines agree. */
-    const int64_t prev_start = stats_meta_int(t.stats, META_DAEMON_STARTED);
-    if (prev_start > 0) {
-        const int64_t prev_last = stats_meta_int(t.stats, META_DAEMON_LAST_POLL);
-        /* "At least", because the marks are written once a heartbeat and the
-         * run ended somewhere after the last one. */
-        pb_log("daemon: previous run lived at least %d s, %d polls, last mark "
-               "%d s before this start",
-               (int)(prev_last - prev_start),
-               (int)stats_meta_int(t.stats, META_DAEMON_POLLS),
-               (int)((int64_t)time(NULL) - prev_last));
-    }
-    stats_meta_set_int(t.stats, META_DAEMON_STARTED, (int64_t)time(NULL));
-    stats_meta_set_int(t.stats, META_DAEMON_LAST_POLL, (int64_t)time(NULL));
-    stats_meta_set_int(t.stats, META_DAEMON_POLLS, 0);
+    daemon_note_start(t.stats);
 
     tracker_recover(&t);
     /* One line every twenty polls, and it reports wall time beside them,
@@ -181,7 +203,7 @@ int run_daemon(void)
             sleep(1);
     }
     tracker_close(&t);
-    unlink(PIDFILE);
+    unlink(pidfile_path());
     pb_log("daemon: stopped by signal %d", (int)stop_signal);
     return 0;
 }

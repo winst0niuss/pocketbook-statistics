@@ -1,11 +1,13 @@
 /* Host test: session derivation from explorer-3-like snapshots. */
 #include "../src/tracker.h"
+#include "../src/daemon.h"
 #include "../src/stats_db.h"
 #include "../src/version.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -209,6 +211,59 @@ static void test_reopen_after_poweroff(sqlite3 *exp)
     unlink(db_path);
 }
 
+/* The same power-off, across a local midnight. The stretch belongs to two days
+ * and has to be written as two rows: every day-level figure groups by
+ * date(end_time), so one row holding both would move the whole evening onto
+ * the new day. */
+static void test_reopen_across_midnight(sqlite3 *exp)
+{
+    const char *db_path = "/tmp/bs_test_reopen_mid.db";
+    unlink(db_path);
+    tracker t;
+    assert(tracker_init(&t, db_path, EXP_DB) == 0);
+    set_since(t.stats, "0");
+
+    const long midnight = today_midnight();
+    const long opened = midnight - 1200; /* 23:40, and reading from there */
+    char sql[256];
+    pb_state s;
+
+    set_state(exp, opened, opened, 100);
+    assert(tracker_read_state(EXP_DB, &s) == 0);
+    assert(tracker_observe(&t, &s) == 1);
+
+    /* Switched off at 00:10 and back on at 00:15: the save predates the open,
+     * 20 pages across half an hour that straddles the day boundary. */
+    tracker_close(&t);
+    assert(tracker_init(&t, db_path, EXP_DB) == 0);
+    set_state(exp, midnight + 900, midnight + 600, 120);
+    assert(tracker_read_state(EXP_DB, &s) == 0);
+    assert(tracker_observe(&t, &s) == 1);
+
+    /* 1800 seconds, split where the day is: 1200 before, 600 after. */
+    snprintf(sql, sizeof(sql),
+             "SELECT active_seconds FROM sessions WHERE start_time=%ld", opened);
+    assert(q1(t.stats, sql) == 1200);
+    snprintf(sql, sizeof(sql),
+             "SELECT active_seconds FROM sessions WHERE start_time=%ld", midnight);
+    assert(q1(t.stats, sql) == 600);
+    /* Neither row carries seconds across the boundary. */
+    snprintf(sql, sizeof(sql),
+             "SELECT COUNT(*) FROM sessions WHERE date(end_time,'unixepoch','localtime')"
+             " <> date(end_time - active_seconds + 1,'unixepoch','localtime')");
+    assert(q1(t.stats, sql) == 0);
+    /* And the pages went with the seconds, in the same proportion. */
+    snprintf(sql, sizeof(sql),
+             "SELECT pages_read FROM sessions WHERE start_time=%ld", opened);
+    const long before = q1(t.stats, sql);
+    snprintf(sql, sizeof(sql),
+             "SELECT pages_read FROM sessions WHERE start_time=%ld", midnight);
+    assert(before + q1(t.stats, sql) == 20);
+
+    tracker_close(&t);
+    unlink(db_path);
+}
+
 /* The streak on the About screen: days in a row with reading, counted back
  * from today. Sessions are written straight into the stats DB — what is being
  * tested is the walk over the days, not how they got there. */
@@ -327,6 +382,200 @@ static void test_manual_totals(void)
     assert(tracker_init(&t, db_path, EXP_DB) == 0);
     assert(stats_meta_int(t.stats, META_OFFSET_SECONDS) == 0);
     assert(stats_meta_int(t.stats, META_OFFSET_BOOKS) == 3);
+
+    tracker_close(&t);
+    unlink(db_path);
+}
+
+/* The year the streak screen draws. The day of the year is what indexes the
+ * grid, so the ends of it and a leap year are where an off-by-one would live,
+ * and a session from another year must not appear at all. */
+static void test_year_days(void)
+{
+    const char *db_path = "/tmp/bs_test_year.db";
+    unlink(db_path);
+    tracker t;
+    assert(tracker_init(&t, db_path, EXP_DB) == 0);
+    set_since(t.stats, "0");
+
+    /* 2024 was a leap year: 366 days, and 29 February is one of them. */
+    struct tm d;
+    memset(&d, 0, sizeof(d));
+    d.tm_year = 124; /* 2024 */
+    d.tm_mday = 1;
+    d.tm_hour = 12;
+    d.tm_isdst = -1;
+    const long jan1 = (long)mktime(&d);
+    d.tm_mon = 1;
+    d.tm_mday = 29;
+    d.tm_isdst = -1;
+    const long feb29 = (long)mktime(&d);
+    d.tm_mon = 11;
+    d.tm_mday = 31;
+    d.tm_isdst = -1;
+    const long dec31 = (long)mktime(&d);
+    /* And one the year does not own. */
+    d.tm_year = 125;
+    d.tm_mon = 0;
+    d.tm_mday = 3;
+    d.tm_isdst = -1;
+    const long next_year = (long)mktime(&d);
+
+    char sql[256];
+    const long days[] = {jan1, feb29, dec31, next_year};
+    for (unsigned i = 0; i < sizeof(days) / sizeof(days[0]); i++) {
+        snprintf(sql, sizeof(sql),
+                 "INSERT INTO sessions (book_id,start_time,end_time,"
+                 " active_seconds,pages_start,pages_end,recovered,pages_read)"
+                 " VALUES (7,%ld,%ld,900,1,10,0,9)", days[i] - 900, days[i]);
+        ex(t.stats, sql);
+    }
+
+    unsigned char grid[366];
+    memset(grid, 0, sizeof(grid));
+    assert(stats_year_days(t.stats, 2024, grid, 366) == 3);
+    assert(grid[0] == 1);   /* 1 January is index 0 */
+    assert(grid[59] == 1);  /* 29 February, which only a leap year has */
+    assert(grid[365] == 1); /* 31 December of a 366-day year */
+    /* Nothing from the year after it. */
+    memset(grid, 0, sizeof(grid));
+    assert(stats_year_days(t.stats, 2025, grid, 365) == 1);
+    assert(grid[2] == 1);
+
+    /* A day under the minute does not count, here or in the streak. */
+    ex(t.stats, "UPDATE sessions SET active_seconds = 30");
+    memset(grid, 0, sizeof(grid));
+    assert(stats_year_days(t.stats, 2024, grid, 366) == 0);
+
+    tracker_close(&t);
+    unlink(db_path);
+}
+
+/* --- The daemon ------------------------------------------------------------
+ *
+ * Only two things about it have a host build: whether it thinks one of its own
+ * is already running, and the marks it leaves behind for the next start. Both
+ * are worth it. The first decides whether the day is measured at all, and it
+ * was wrong on a real device for months; the second is the only evidence there
+ * will ever be about a daemon that is killed without a chance to say so. */
+
+#define TEST_PIDFILE "/tmp/bs_test_daemon.pid"
+#define TEST_PROC "/tmp/bs_test_proc"
+
+static void write_pidfile_text(const char *text)
+{
+    FILE *f = fopen(TEST_PIDFILE, "w");
+    assert(f != NULL);
+    fputs(text, f);
+    fclose(f);
+}
+
+/* /proc/<pid>/cmdline as the kernel writes it: arguments separated by NULs,
+ * which is the part the check has to get right. */
+static void write_cmdline(int pid, const char *args, size_t len)
+{
+    char dir[128], path[160];
+    snprintf(dir, sizeof(dir), "%s/%d", TEST_PROC, pid);
+    mkdir(TEST_PROC, 0755);
+    mkdir(dir, 0755);
+    snprintf(path, sizeof(path), "%s/cmdline", dir);
+    FILE *f = fopen(path, "wb");
+    assert(f != NULL);
+    assert(fwrite(args, 1, len, f) == len);
+    fclose(f);
+}
+
+static void remove_cmdline(int pid)
+{
+    char path[160], dir[128];
+    snprintf(path, sizeof(path), "%s/%d/cmdline", TEST_PROC, pid);
+    snprintf(dir, sizeof(dir), "%s/%d", TEST_PROC, pid);
+    unlink(path);
+    rmdir(dir);
+}
+
+static void test_daemon_alive(void)
+{
+    setenv("POCKETBOOK_STATISTICS_PIDFILE", TEST_PIDFILE, 1);
+    setenv("POCKETBOOK_STATISTICS_PROC", TEST_PROC, 1);
+    const int self = (int)getpid();
+    char pid_text[32];
+    snprintf(pid_text, sizeof(pid_text), "%d\n", self);
+
+    /* No pidfile: nothing has ever started one. */
+    unlink(TEST_PIDFILE);
+    assert(daemon_alive() == 0);
+
+    /* A live pid whose process is one of ours. This process stands in for the
+     * daemon, so the pid is genuinely alive and kill(pid, 0) succeeds. */
+    write_pidfile_text(pid_text);
+    static const char ours[] =
+        "/mnt/ext1/applications/PocketBookStatistics.app\0--daemon\0";
+    write_cmdline(self, ours, sizeof(ours) - 1);
+    assert(daemon_alive() == 1);
+
+    /* The same live pid, but the process is the firmware's reader. This is the
+     * case that cost a real device its measurements: the pidfile survived a
+     * reboot and the number had been handed to somebody else. */
+    static const char reader[] = "/ebrmain/bin/eink-reader.app\0/mnt/ext1/b.epub\0";
+    write_cmdline(self, reader, sizeof(reader) - 1);
+    assert(daemon_alive() == 0);
+
+    /* Our own app, but not the daemon: the flag is what tells them apart. */
+    static const char app[] = "/mnt/ext1/applications/PocketBookStatistics.app\0";
+    write_cmdline(self, app, sizeof(app) - 1);
+    assert(daemon_alive() == 0);
+
+    /* An empty cmdline is a zombie, which polls nothing. */
+    write_cmdline(self, "", 0);
+    assert(daemon_alive() == 0);
+
+    /* A cmdline that cannot be read counts as gone. Not starting a daemon
+     * costs a day of measurement; a second one costs a poll loop and cannot
+     * double-count. */
+    remove_cmdline(self);
+    assert(daemon_alive() == 0);
+
+    /* A pid nothing owns, and a pidfile with nothing in it. */
+    write_cmdline(self, ours, sizeof(ours) - 1);
+    write_pidfile_text("2147483640\n");
+    assert(daemon_alive() == 0);
+    write_pidfile_text("not a pid\n");
+    assert(daemon_alive() == 0);
+    write_pidfile_text("");
+    assert(daemon_alive() == 0);
+
+    unlink(TEST_PIDFILE);
+    remove_cmdline(self);
+    unsetenv("POCKETBOOK_STATISTICS_PIDFILE");
+    unsetenv("POCKETBOOK_STATISTICS_PROC");
+}
+
+static void test_daemon_marks(void)
+{
+    const char *db_path = "/tmp/bs_test_marks.db";
+    unlink(db_path);
+    tracker t;
+    assert(tracker_init(&t, db_path, EXP_DB) == 0);
+
+    /* A first start on a fresh database: the marks appear, and there is no
+     * previous run to report. */
+    assert(stats_meta_int(t.stats, META_DAEMON_STARTED) == 0);
+    daemon_note_start(t.stats);
+    const int64_t first = stats_meta_int(t.stats, META_DAEMON_STARTED);
+    assert(first > 0);
+    assert(stats_meta_int(t.stats, META_DAEMON_LAST_POLL) == first);
+    assert(stats_meta_int(t.stats, META_DAEMON_POLLS) == 0);
+
+    /* A run that polled for a while and was then killed. What the heartbeat
+     * left behind is what the next start reads. */
+    stats_meta_set_int(t.stats, META_DAEMON_POLLS, 40);
+    stats_meta_set_int(t.stats, META_DAEMON_LAST_POLL, first + 600);
+    daemon_note_start(t.stats);
+    assert(stats_meta_int(t.stats, META_DAEMON_POLLS) == 0);
+    const int64_t second = stats_meta_int(t.stats, META_DAEMON_STARTED);
+    assert(second >= first);
+    assert(stats_meta_int(t.stats, META_DAEMON_LAST_POLL) == second);
 
     tracker_close(&t);
     unlink(db_path);
@@ -816,6 +1065,10 @@ int main(void)
     tracker_close(&jumper);
 
     test_reopen_after_poweroff(exp);
+    test_reopen_across_midnight(exp);
+    test_year_days();
+    test_daemon_alive();
+    test_daemon_marks();
     test_streak();
     test_manual_totals();
     test_version_compare();
