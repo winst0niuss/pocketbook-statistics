@@ -112,6 +112,84 @@ static long q1(sqlite3 *db, const char *sql)
     return v;
 }
 
+/* Switched off inside a book. The firmware saves the position on the way down
+ * and stamps a fresh opentime on the way up, so the save is older than the open
+ * that follows it. Taken from a real device, where 14 minutes and 10 turned
+ * pages arrived as a day with no reading at all: the new session's own window
+ * is zero seconds wide, and ten pages inside it read as a jump. */
+static void test_reopen_after_poweroff(sqlite3 *exp)
+{
+    const char *db_path = "/tmp/bs_test_reopen.db";
+    unlink(db_path);
+    tracker t;
+    assert(tracker_init(&t, db_path, EXP_DB) == 0);
+    set_since(t.stats, "0");
+
+    const long t0 = today_noon();
+    char sql[256];
+
+    /* The book is opened and the firmware saves the position in the same
+     * second: a session with nothing in it yet. */
+    set_state(exp, t0, t0, 123);
+    pb_state s;
+    assert(tracker_read_state(EXP_DB, &s) == 0);
+    assert(tracker_observe(&t, &s) == 1);
+    assert(q1(t.stats, "SELECT COUNT(*) FROM sessions") == 1);
+
+    /* 14 minutes of reading, ten pages, and the one save that recorded it
+     * lands while nothing is polling — the reader is on its way off. Then it
+     * comes back up: a fresh daemon, and an opentime stamped after that save. */
+    tracker_close(&t);
+    assert(tracker_init(&t, db_path, EXP_DB) == 0);
+    set_state(exp, t0 + 890, t0 + 838, 133);
+    assert(tracker_read_state(EXP_DB, &s) == 0);
+    assert(tracker_observe(&t, &s) == 1);
+
+    /* The stretch belongs to the row that was open when it was read. */
+    snprintf(sql, sizeof(sql),
+             "SELECT active_seconds FROM sessions WHERE start_time=%ld", t0);
+    assert(q1(t.stats, sql) == 838);
+    snprintf(sql, sizeof(sql),
+             "SELECT pages_read FROM sessions WHERE start_time=%ld", t0);
+    assert(q1(t.stats, sql) == 10);
+    /* The reopen is still a session of its own, and it starts empty. */
+    assert(q1(t.stats, "SELECT COUNT(*) FROM sessions") == 2);
+    snprintf(sql, sizeof(sql),
+             "SELECT active_seconds FROM sessions WHERE start_time=%ld",
+             t0 + 890);
+    assert(q1(t.stats, sql) == 0);
+
+    /* Seen twice is paid once: update_session only moves a row's end forward,
+     * and the app's catchUp() observes the same state seconds later. */
+    assert(tracker_read_state(EXP_DB, &s) == 0);
+    tracker_observe(&t, &s);
+    snprintf(sql, sizeof(sql),
+             "SELECT active_seconds FROM sessions WHERE start_time=%ld", t0);
+    assert(q1(t.stats, sql) == 838);
+    assert(q1(t.stats, "SELECT COUNT(*) FROM sessions") == 2);
+
+    /* A jump before the reopen is still navigation: 300 pages in a minute is
+     * a link to the notes at the back, not a minute of reading. */
+    tracker_close(&t);
+    unlink(db_path);
+    assert(tracker_init(&t, db_path, EXP_DB) == 0);
+    set_since(t.stats, "0");
+    set_state(exp, t0, t0, 123);
+    assert(tracker_read_state(EXP_DB, &s) == 0);
+    assert(tracker_observe(&t, &s) == 1);
+    tracker_close(&t);
+    assert(tracker_init(&t, db_path, EXP_DB) == 0);
+    set_state(exp, t0 + 120, t0 + 60, 423);
+    assert(tracker_read_state(EXP_DB, &s) == 0);
+    assert(tracker_observe(&t, &s) == 1);
+    snprintf(sql, sizeof(sql),
+             "SELECT active_seconds FROM sessions WHERE start_time=%ld", t0);
+    assert(q1(t.stats, sql) == 0);
+
+    tracker_close(&t);
+    unlink(db_path);
+}
+
 /* The streak on the About screen: days in a row with reading, counted back
  * from today. Sessions are written straight into the stats DB — what is being
  * tested is the walk over the days, not how they got there. */
@@ -718,6 +796,7 @@ int main(void)
     assert(q1(jumper.stats, "SELECT pages_read FROM sessions") == 0);
     tracker_close(&jumper);
 
+    test_reopen_after_poweroff(exp);
     test_streak();
     test_manual_totals();
     test_version_compare();

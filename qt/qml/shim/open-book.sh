@@ -26,8 +26,13 @@ log() {
 # QtGui/QtQml/QtQuick before main() runs, even in --daemon mode, and the book
 # opens that much later. Nearly every open finds a live daemon and starts
 # nothing at all.
+# A live pid is not our pid. The pidfile survives a reboot and the number in it
+# is then regularly some process of the firmware's, so ask what the process
+# actually is before believing the daemon runs.
 DPID=$(cat "$PIDFILE" 2>/dev/null)
-if [ -n "$DPID" ] && [ -d "/proc/$DPID" ]; then
+if [ -n "$DPID" ] && [ -d "/proc/$DPID" ] \
+   && tr '\0' ' ' < "/proc/$DPID/cmdline" 2>/dev/null \
+      | grep -q 'PocketBookStatistics.*--daemon'; then
     log "daemon: already running ($DPID)"
 elif [ -x "$APP" ]; then
     # Wait first: the daemon is not needed for another poll interval, and the

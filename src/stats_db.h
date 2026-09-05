@@ -35,6 +35,12 @@ int stats_year_days(sqlite3 *db, int year, unsigned char *days, int count);
  * was never written reads as 0, which is the un-adjusted case. */
 #define META_OFFSET_SECONDS "manual_offset_seconds"
 #define META_OFFSET_BOOKS "manual_offset_books"
+/* What the daemon leaves behind while it is alive, so the next start can say
+ * how the previous run ended. It is killed with SIGKILL often enough that a
+ * log line on the way out cannot be relied on. */
+#define META_DAEMON_STARTED "daemon_started"
+#define META_DAEMON_POLLS "daemon_polls"
+#define META_DAEMON_LAST_POLL "daemon_last_poll"
 int64_t stats_meta_int(sqlite3 *db, const char *key);
 /* 0 on success. */
 int stats_meta_set_int(sqlite3 *db, const char *key, int64_t value);

@@ -5,6 +5,11 @@
 #define STATS_DIR "/mnt/ext1/system/pocketbook-statistics"
 #define STATS_DB STATS_DIR "/statistics.db"
 #define PIDFILE STATS_DIR "/statistics.pid"
+/* What the daemon's own /proc/<pid>/cmdline has to contain for a pid to count
+ * as ours. A number alone proves nothing: after a reboot the pid in the file is
+ * regularly a live process of the firmware's. */
+#define DAEMON_BINARY "PocketBookStatistics"
+#define DAEMON_FLAG "--daemon"
 #define COVER_DIR "/mnt/ext1/system/cover_chache/hashed"
 /* Our own cover cache: EPUB extractions plus copies of firmware covers, which
  * is what keeps a thumbnail after the book file is gone. */
