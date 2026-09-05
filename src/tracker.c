@@ -813,13 +813,19 @@ static void close_previous_session(tracker *t, const pb_state *s)
         return; /* nothing to close, or someone has already closed it */
 
     const int64_t span = s->position_ts - row_end;
-    const int delta = pages_end < 0 ? -1 : s->cpage - pages_end;
-    int64_t active = credited(span, delta);
-    if (page_jump(span, delta)) {
-        pb_log("jump: %d pages in %d s before the reopen, not read", delta,
-               (int)span);
+    /* -1 is "no page evidence", which credited() answers with the flat cap.
+     * A real move backwards is a different thing and buys nothing at all, the
+     * way it does in the gap path: the reader went to a bookmark, and what is
+     * read from there is credited by the observations that follow. */
+    const int has_pages = pages_end >= 0;
+    const int delta = has_pages ? s->cpage - pages_end : -1;
+    int64_t active = has_pages && delta < 0 ? 0 : credited(span, delta);
+    /* Silently: the state that brought us here lasts until the firmware saves
+     * a position again, and StatsBridge::catchUp() builds a fresh tracker on
+     * every refresh, so a line here would repeat for as long as it holds. What
+     * is worth a log line is the credit, which happens once. */
+    if (page_jump(span, delta))
         active = 0;
-    }
     if (active <= 0)
         return;
     const int pages = delta > 0 ? delta : 0;
@@ -854,8 +860,15 @@ int tracker_observe(tracker *t, const pb_state *s)
     if (open.position_ts < open.opentime) {
         /* Before the clamp takes the evidence away: that older position is the
          * previous session's last save, and the reading up to it is still
-         * unpaid. */
-        close_previous_session(t, s);
+         * unpaid.
+         *
+         * Only when this tracker has not seen the session yet. A reopened book
+         * keeps its stale position_ts until the firmware saves again, which is
+         * up to 75 minutes of polls, and asking the database on every one of
+         * them buys nothing: the transition is what carries the unpaid
+         * stretch. */
+        if (t->cur_open != s->opentime)
+            close_previous_session(t, s);
         open.position_ts = open.opentime;
     }
 

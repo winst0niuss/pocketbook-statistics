@@ -168,6 +168,25 @@ static void test_reopen_after_poweroff(sqlite3 *exp)
     assert(q1(t.stats, sql) == 838);
     assert(q1(t.stats, "SELECT COUNT(*) FROM sessions") == 2);
 
+    /* A move backwards before the reopen buys nothing either: the reader went
+     * to a bookmark, and what is read from there is credited by the
+     * observations that follow. */
+    tracker_close(&t);
+    unlink(db_path);
+    assert(tracker_init(&t, db_path, EXP_DB) == 0);
+    set_since(t.stats, "0");
+    set_state(exp, t0, t0, 123);
+    assert(tracker_read_state(EXP_DB, &s) == 0);
+    assert(tracker_observe(&t, &s) == 1);
+    tracker_close(&t);
+    assert(tracker_init(&t, db_path, EXP_DB) == 0);
+    set_state(exp, t0 + 890, t0 + 838, 40);
+    assert(tracker_read_state(EXP_DB, &s) == 0);
+    assert(tracker_observe(&t, &s) == 1);
+    snprintf(sql, sizeof(sql),
+             "SELECT active_seconds FROM sessions WHERE start_time=%ld", t0);
+    assert(q1(t.stats, sql) == 0);
+
     /* A jump before the reopen is still navigation: 300 pages in a minute is
      * a link to the notes at the back, not a minute of reading. */
     tracker_close(&t);

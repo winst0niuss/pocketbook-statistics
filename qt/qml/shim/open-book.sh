@@ -30,9 +30,18 @@ log() {
 # is then regularly some process of the firmware's, so ask what the process
 # actually is before believing the daemon runs.
 DPID=$(cat "$PIDFILE" 2>/dev/null)
-if [ -n "$DPID" ] && [ -d "/proc/$DPID" ] \
-   && tr '\0' ' ' < "/proc/$DPID/cmdline" 2>/dev/null \
-      | grep -q 'PocketBookStatistics.*--daemon'; then
+DCMD=''
+[ -n "$DPID" ] && [ -r "/proc/$DPID/cmdline" ] \
+    && DCMD=$(tr -d '\000' < "/proc/$DPID/cmdline" 2>/dev/null)
+# Pure shell on purpose: no grep on a file full of NUL bytes, whose behaviour
+# differs between busybox and GNU. Dropping the separators glues the arguments
+# together, which the pattern allows for.
+case "$DCMD" in
+    *PocketBookStatistics*--daemon*) DAEMON_UP=1 ;;
+    *)                               DAEMON_UP=0 ;;
+esac
+
+if [ "$DAEMON_UP" = 1 ]; then
     log "daemon: already running ($DPID)"
 elif [ -x "$APP" ]; then
     # Wait first: the daemon is not needed for another poll interval, and the
