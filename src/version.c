@@ -2,12 +2,20 @@
 
 #include <ctype.h>
 
-/* A version is three dot-separated numbers, optionally followed by a release
- * candidate suffix: "1.4.0", "v1.4.0", "1.4.0-rc2". The candidate number is
- * kept apart from the three because it orders the other way round — 1.4.0-rc2
- * comes *before* 1.4.0, the way semver has it — and because a build that only
- * knew the three would see every candidate for a release as that release and
- * never offer the next one. */
+/* A version is three dot-separated numbers, optionally followed by a
+ * pre-release suffix: "1.4.0", "v1.4.0", "1.4.0-rc2", "2.1.0-pr7". The suffix
+ * number is kept apart from the three because it orders the other way round —
+ * 1.4.0-rc2 comes *before* 1.4.0, the way semver has it — and because a build
+ * that only knew the three would see every candidate for a release as that
+ * release and never offer the next one.
+ *
+ * Two spellings, one counter. "rc" is a candidate cut by hand; "pr" is a build
+ * published from a pull request. CI numbers both from the tags that already
+ * exist for that version, so the numbers never collide and the suffix letters
+ * carry no order of their own: 2.1.0-pr7 is simply later than 2.1.0-rc3. Any
+ * other suffix is ignored, which reads the version as the final release it is
+ * built on — the old behaviour, and the safe one, since a final release
+ * outranks nothing that follows it. */
 static void parse(const char *s, int out[3], int *rc)
 {
     out[0] = out[1] = out[2] = 0;
@@ -27,14 +35,16 @@ static void parse(const char *s, int out[3], int *rc)
     }
     if (*s == '-' || *s == '~')
         s++;
-    if ((*s == 'r' || *s == 'R') && (s[1] == 'c' || s[1] == 'C')) {
+    const int is_rc = (s[0] == 'r' || s[0] == 'R') && (s[1] == 'c' || s[1] == 'C');
+    const int is_pr = (s[0] == 'p' || s[0] == 'P') && (s[1] == 'r' || s[1] == 'R');
+    if (is_rc || is_pr) {
         s += 2;
         if (*s == '.' || *s == '-')
             s++;
         int n = 0;
         while (isdigit((unsigned char)*s))
             n = n * 10 + (*s++ - '0');
-        *rc = n > 0 ? n : 1; /* a bare "-rc" is the first one */
+        *rc = n > 0 ? n : 1; /* a bare "-rc" or "-pr" is the first one */
     }
 }
 

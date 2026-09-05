@@ -47,42 +47,74 @@ jobs:
       # A device-side change is only ever proved on the device, and the way
       # there is a pre-release: /releases/latest ignores those, so an ordinary
       # reader keeps seeing the last final version and only the one carrying
-      # the `prerelease` marker file is offered a candidate.
+      # the `prerelease` marker file is offered one.
       #
-      # The opt-in is VERSION itself. A pull request that bumps it above the
-      # last release gets every push published as the next candidate of that
-      # version; a pull request that leaves VERSION alone publishes nothing,
-      # which is what keeps the release list from filling up with builds
-      # nobody intends to install.
+      # These are published as vX.Y.Z-prN, not -rcN: a candidate is something
+      # aimed at a release, while this is whatever the branch happens to be at.
+      # They share one counter with the candidates, so the numbers never
+      # collide and version_compare() can order them by the number alone.
+      #
+      # Asked for, never automatic. Most pushes to a branch are not worth
+      # installing, and a release list full of them is unreadable. Two ways to
+      # ask, both read off the commit at the head of the branch:
+      #
+      #   * the word [device] anywhere in its message, or
+      #   * a change to VERSION in it.
+      #
+      # VERSION also has to stand above the last release, or the reader would
+      # never be offered the build at all; when it does not, the run says so
+      # rather than publishing something nobody can install.
       #
       # VERSION is rewritten here rather than after the build, because the
       # binary has to carry the same string as the tag: the updater compares
-      # the release's tag_name against APP_VERSION, and a build stamped 1.7.0
-      # would refuse every 1.7.0-rcN that came after it.
-      - name: Stamp a candidate version for this pull request
+      # the release's tag_name against APP_VERSION, and a build stamped 2.1.0
+      # would refuse every 2.1.0-prN that came after it.
+      - name: Stamp a device build for this pull request
         id: candidate
         if: github.event_name == 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
+          COMMIT=$(gh api "repos/$GITHUB_REPOSITORY/commits/$HEAD_SHA")
+          MSG=$(printf '%s' "$COMMIT" | jq -r .commit.message)
+          ASKED=0
+          case "$MSG" in
+            *'[device]'*) ASKED=1 ;;
+          esac
+          if printf '%s' "$COMMIT" | jq -r '.files[].filename' | grep -qx VERSION; then
+            ASKED=1
+          fi
+          if [ "$ASKED" = 0 ]; then
+            echo "No device build for this push." >> "$GITHUB_STEP_SUMMARY"
+            echo "Put \`[device]\` in the commit message, or bump \`VERSION\`, to get one." \
+              >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
           # Any suffix the file already carries is ours to replace.
           BASE=$(sed 's/-.*//' VERSION)
           LATEST=$(gh release view --json tagName -q .tagName 2>/dev/null | sed 's/^v//' || true)
           if [ -n "$LATEST" ] \
              && [ "$(printf '%s\n%s\n' "$LATEST" "$BASE" | sort -V | tail -n1)" = "$LATEST" ]; then
-            echo "VERSION is $BASE, the last release is v$LATEST — no candidate published."
-            echo "Set VERSION to the release this branch is heading for to get one." \
+            echo "::warning::VERSION is $BASE and the last release is v$LATEST, so a build would never be offered to the reader. Nothing published."
+            echo "Asked for a device build, but VERSION ($BASE) is not above the last release (v$LATEST), so nothing was published." \
               >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          # Count tags, not releases: a finished -rc run has its releases
-          # deleted and its tags may outlive them, and reusing a tag fails.
+
+          # Count tags, not releases: a finished run has its releases deleted
+          # and its tags may outlive them, and reusing a tag fails. Candidates
+          # and pull request builds share the counter.
+          # grep -E for the alternation and sed for the strip: BRE alternation
+          # is a GNU extension, and this has to be checkable off the runner.
           N=$(gh api "repos/$GITHUB_REPOSITORY/tags" --paginate -q '.[].name' \
-              | sed -n "s/^v$BASE-rc\([0-9][0-9]*\)$/\1/p" | sort -n | tail -n1)
+              | grep -E "^v$BASE-(rc|pr)[0-9]+$" \
+              | sed "s/^v$BASE-[a-z]*//" | sort -n | tail -n1)
           N=$(( ${N:-0} + 1 ))
-          echo "$BASE-rc$N" > VERSION
-          echo "tag=v$BASE-rc$N" >> "$GITHUB_OUTPUT"
-          echo "Publishing v$BASE-rc$N" >> "$GITHUB_STEP_SUMMARY"
+          echo "$BASE-pr$N" > VERSION
+          echo "tag=v$BASE-pr$N" >> "$GITHUB_OUTPUT"
+          echo "Publishing v$BASE-pr$N" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Fetch PocketBook SDK
         run: make sdk
@@ -115,7 +147,7 @@ jobs:
       # The tag points at the head of the branch, while what was built is the
       # merge of that head into main — which is the version worth installing,
       # and the same thing the checks passed on.
-      - name: Publish the candidate
+      - name: Publish the device build
         if: steps.candidate.outputs.tag != ''
         env:
           GH_TOKEN: ${{ github.token }}
@@ -127,7 +159,7 @@ jobs:
             --prerelease \
             --target "$HEAD_SHA" \
             --title "$TAG (PR #$PR)" \
-            --notes "Device build of #$PR at \`${HEAD_SHA:0:7}\`, merged into \`main\`. A pre-release: only a reader carrying the \`prerelease\` marker file is ever offered it."
+            --notes "Device build of #$PR at \`${HEAD_SHA:0:7}\`, merged into \`main\`. A pre-release: only a reader carrying the \`prerelease\` marker file is ever offered it. Not a release candidate: it is whatever the branch was at when it was asked for."
           gh pr comment "$PR" --body \
             "Device build published as [$TAG](https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG)"
 
@@ -140,8 +172,8 @@ jobs:
         # opt-in marker file are ever offered a candidate.
         run: |
           case "$GITHUB_REF_NAME" in
-            *-rc*) PRE=--prerelease ;;
-            *)     PRE= ;;
+            *-rc*|*-pr*) PRE=--prerelease ;;
+            *)           PRE= ;;
           esac
           gh release create "$GITHUB_REF_NAME" PocketBookStatistics.zip \
             --generate-notes $PRE
