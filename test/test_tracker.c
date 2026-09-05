@@ -252,13 +252,19 @@ static void test_reopen_across_midnight(sqlite3 *exp)
              "SELECT COUNT(*) FROM sessions WHERE date(end_time,'unixepoch','localtime')"
              " <> date(end_time - active_seconds + 1,'unixepoch','localtime')");
     assert(q1(t.stats, sql) == 0);
-    /* And the pages went with the seconds, in the same proportion. */
+    /* And the pages went with the seconds, in the same proportion: two thirds
+     * of the window fell before midnight, so two thirds of the pages did.
+     * Checking only the sum would let a split that gives one side everything
+     * pass, and then a day's pace would be built on pages nobody read in it. */
     snprintf(sql, sizeof(sql),
              "SELECT pages_read FROM sessions WHERE start_time=%ld", opened);
-    const long before = q1(t.stats, sql);
+    const long pages_before = q1(t.stats, sql);
     snprintf(sql, sizeof(sql),
              "SELECT pages_read FROM sessions WHERE start_time=%ld", midnight);
-    assert(before + q1(t.stats, sql) == 20);
+    const long pages_after = q1(t.stats, sql);
+    assert(pages_before == 13); /* 20 * 1200 / 1800, rounded down */
+    assert(pages_after == 7);
+    assert(pages_before + pages_after == 20);
 
     tracker_close(&t);
     unlink(db_path);
@@ -547,6 +553,7 @@ static void test_daemon_alive(void)
 
     unlink(TEST_PIDFILE);
     remove_cmdline(self);
+    rmdir(TEST_PROC);
     unsetenv("POCKETBOOK_STATISTICS_PIDFILE");
     unsetenv("POCKETBOOK_STATISTICS_PROC");
 }
