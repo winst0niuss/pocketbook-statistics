@@ -605,12 +605,21 @@ int main(void)
     set_state(exp, base, now - 1200, 113);
     assert(tracker_read_state(EXP_DB, &s) == 0);
     assert(tracker_observe(&sleepy, &s) == 2);
+    /* How much of the standby the tracker could rule out depends on the clock
+     * it read while observing: `asleep` loses everything that lies after
+     * position_ts, and that stretch grows by a second every time the test
+     * crosses a second boundary. So the window is 900 s plus however long this
+     * test itself has been running, which is what `elapsed` measures. Asserting
+     * a bare 900 made the test fail whenever the machine was slow enough to
+     * tick over, which is exactly what happened on CI. */
+    const long elapsed = (long)time(NULL) - now;
     /* Split-invariant: a run started within 75 minutes of local midnight puts
      * the session in two rows, and the split moves seconds without making any. */
     snprintf(sql, sizeof(sql),
              "SELECT SUM(active_seconds) FROM sessions WHERE book_id=7");
     long got = q1(sleepy.stats, sql);
-    assert(got >= 897 && got <= 900); /* 3300 window - 2400 asleep */
+    /* 3300 window - 2400 asleep */
+    assert(got >= 897 && got <= 900 + elapsed);
 
     /* The same standby is never deducted twice: the row carries the total it
      * was billed against, and this window is measured from there. */
@@ -618,7 +627,8 @@ int main(void)
     assert(tracker_read_state(EXP_DB, &s) == 0);
     assert(tracker_observe(&sleepy, &s) == 2);
     got = q1(sleepy.stats, sql);
-    assert(got >= 2097 && got <= 2100); /* + a clean 1200 s window */
+    /* + a clean 1200 s window, and the same slack as above */
+    assert(got >= 2097 && got <= 2100 + elapsed);
     tracker_close(&sleepy);
 
     /* A footnote link is not reading. Books that gather their notes at the
