@@ -140,9 +140,21 @@ and delete the `system/pocketbook-statistics/` folder.
 
 ## Something went wrong
 
-The app writes a log to `system/pocketbook-statistics/app.log`, one line per
-event. After a failed update the ⓘ screen shows the last lines of it. Otherwise
-read the file over USB. It is also the best thing to attach to a bug report.
+I build this app for myself, on the only reader I own, a PB629. I have no way to
+test it on any other device, so your report is the only way I learn how it
+behaves elsewhere.
+
+If something breaks, please [open an issue](../../issues) and attach:
+
+- the log from `system/pocketbook-statistics/app.log`, where the app and the
+  service write one line per event,
+- a screenshot or a photo of what you see,
+- your reader model and firmware version.
+
+After a failed update the ⓘ screen shows the last lines of the log. Otherwise
+copy the file over USB.
+
+I read every issue and I am grateful for each one.
 
 ## Build
 
