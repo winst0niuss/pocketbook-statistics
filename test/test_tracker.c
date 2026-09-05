@@ -254,6 +254,25 @@ static void test_version_compare(void)
     assert(version_compare("1.4.0-rc2", "1.3.9") == 1);
     assert(version_compare("1.4.0-rc", "1.4.0-rc1") == 0); /* bare rc is the first */
     assert(version_compare("", "0.0.1") == -1);        /* garbage reads as 0.0.0 */
+
+    /* Builds published from a pull request are spelled -prN and share the
+     * candidates' counter, so the letters carry no order of their own: what
+     * decides is the number CI took from the tags already there. A device on
+     * the pre-release channel has to be offered every one of them in turn, and
+     * the finished release has to beat them all. */
+    assert(version_compare("v2.1.0-pr1", "2.1.0") == -1);
+    assert(version_compare("2.1.0", "v2.1.0-pr9") == 1);
+    assert(version_compare("2.1.0-pr1", "2.1.0-pr2") == -1);
+    assert(version_compare("2.1.0-pr10", "2.1.0-pr9") == 1);  /* numeric, not textual */
+    assert(version_compare("2.1.0-pr2", "2.1.0-pr2") == 0);
+    assert(version_compare("2.1.0-pr1", "2.0.1") == 1);       /* a newer version wins */
+    assert(version_compare("2.1.0-pr4", "2.1.0-rc3") == 1);   /* one shared counter */
+    assert(version_compare("2.1.0-rc5", "2.1.0-pr4") == 1);
+    assert(version_compare("2.1.0-PR3", "2.1.0-pr2") == 1);   /* case is not part of it */
+    assert(version_compare("2.1.0-pr", "2.1.0-pr1") == 0);    /* a bare -pr is the first */
+    /* A suffix nobody defined reads as the release it is built on, which is
+     * what the parser did before -pr existed. */
+    assert(version_compare("2.1.0-beta2", "2.1.0") == 0);
 }
 
 int main(void)

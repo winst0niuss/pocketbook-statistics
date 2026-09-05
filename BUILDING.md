@@ -119,11 +119,20 @@ git tag v2.1.0 && git push origin v2.1.0
 The tag has to match `VERSION`, or the build fails on purpose: the in-app update
 check compares the release tag against the version compiled into the binary.
 
-A pull request can publish a build too, for testing on a real device. Set
-`VERSION` above the last release and every push to the branch is published as
-`vX.Y.Z-rcN`, a pre-release. `/releases/latest` ignores pre-releases, so only a
-device carrying the `system/pocketbook-statistics/prerelease` marker file is
-ever offered one. A branch that leaves `VERSION` alone publishes nothing.
+A pull request can publish a build too, for testing on a real device, but only
+when you ask for it:
+
+- put `[device]` anywhere in the commit message, or
+- change `VERSION` in that commit.
+
+Either one publishes that push as `vX.Y.Z-prN`, a pre-release. `/releases/latest`
+ignores pre-releases, so only a device carrying the
+`system/pocketbook-statistics/prerelease` marker file is ever offered one.
+
+`VERSION` also has to stand above the last release, or the reader would never be
+offered the build; when it does not, the run warns and publishes nothing. The
+number is counted from the tags already there, and `-pr` builds share that
+counter with hand-cut `-rc` candidates, so they never collide.
 
 ## Translations
 
