@@ -42,8 +42,14 @@ const char *explorer_db_path(void)
  * /proc/<pid>/cmdline holds the binary and its arguments, NUL-separated, and
  * ours carries both the app's name and the --daemon flag.
  *
- * Where there is no procfs to ask — the host tests — the pid alone still
- * decides, which keeps the old behaviour rather than inventing a new one. */
+ * A cmdline that cannot be read counts as "not ours" and a daemon is started.
+ * The two mistakes are not equal: a daemon that was not started measures
+ * nothing until the app is next opened, while a second one costs a poll loop
+ * and cannot double-count — update_session() only ever moves a row's end
+ * forward, so the loser of a race adds nothing. It is also the case for a
+ * zombie, whose cmdline is empty and which polls nothing. procfs is there on
+ * this firmware: the startup measurement reads /proc/self/stat and the shim
+ * has always read /proc/<pid>. */
 static int daemon_alive(void)
 {
     FILE *f = fopen(PIDFILE, "r");
@@ -59,8 +65,10 @@ static int daemon_alive(void)
     char path[64];
     snprintf(path, sizeof(path), "/proc/%d/cmdline", pid);
     FILE *c = fopen(path, "r");
-    if (!c)
-        return 1;
+    if (!c) {
+        pb_log("daemon: cannot read %s, treating pid %d as gone", path, pid);
+        return 0;
+    }
     char cmd[512];
     const size_t n = fread(cmd, 1, sizeof(cmd) - 1, c);
     fclose(c);
@@ -118,8 +126,10 @@ int run_daemon(void)
     const int64_t prev_start = stats_meta_int(t.stats, META_DAEMON_STARTED);
     if (prev_start > 0) {
         const int64_t prev_last = stats_meta_int(t.stats, META_DAEMON_LAST_POLL);
-        pb_log("daemon: previous run lived %d s, %d polls, last mark %d s "
-               "before this start",
+        /* "At least", because the marks are written once a heartbeat and the
+         * run ended somewhere after the last one. */
+        pb_log("daemon: previous run lived at least %d s, %d polls, last mark "
+               "%d s before this start",
                (int)(prev_last - prev_start),
                (int)stats_meta_int(t.stats, META_DAEMON_POLLS),
                (int)((int64_t)time(NULL) - prev_last));
