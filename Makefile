@@ -27,6 +27,7 @@ test:
 	  src/tracker.c src/stats_db.c src/version.c src/log.c src/daemon.c -lsqlite3
 	./build/test_tracker
 	@python3 tools/check_qml.py
+	@$(MAKE) --no-print-directory i18ncheck
 
 # ---- Build the app (single ELF, links the device's Qt at runtime) ----
 qt:
@@ -48,7 +49,15 @@ icons:
 clean:
 	rm -rf build build-qt
 
-.PHONY: sdk test qmlcheck qt deploy icons clean
+.PHONY: sdk test qmlcheck i18ncheck qt deploy icons clean
+
+# ---- Catalogs: the one part of the app nothing else compiles or runs ----
+# A missing key falls back to English on the device and says nothing; a renamed
+# placeholder renders as "{version}" mid-sentence. Known gaps live in
+# qt/qml/i18n/untranslated.json — `--update-baseline` rewrites it.
+i18ncheck:
+	@command -v node >/dev/null || { echo "i18n: node not found, skipping"; exit 0; }; \
+	  node tools/check_i18n.mjs
 
 # ---- QML sanity: things qmllint lets through but the engine refuses ----
 # A duplicated function or id stops the component being created, and the app
