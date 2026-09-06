@@ -57,6 +57,11 @@ jobs:
   # Cross-compile in the SDK image and publish PocketBookStatistics.zip.
   build:
     runs-on: ubuntu-latest
+    # Nothing is published over a failing test. This job is the one that writes
+    # a release, and the two above take about a minute between them against the
+    # five this one needs — so the wait costs the pipeline nothing, and a build
+    # that reached a reader while a test was red would cost a version.
+    needs: [test, qt-test]
     permissions:
       contents: write # gh release create
       pull-requests: write # the comment naming the candidate

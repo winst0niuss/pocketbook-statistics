@@ -13,7 +13,6 @@
  * read on every call so one test process can work in several roots.
  */
 QString devicePath(const char *absolute);
-QString devicePath(const QString &absolute);
 
 /* The installed binary — QCoreApplication::applicationFilePath(), except where
  * POCKETBOOK_STATISTICS_APP names one instead. The updater stages beside it and

@@ -276,6 +276,12 @@ void TestStatsBridge::theBookCardOnlyLeadsBackWhereThereIsAFile()
     QVERIFY(stats.openBook(path));
     QCOMPARE(InkViewStub::openedBooks, QList<QString>{path});
 
+    /* A firmware that exports no OpenBook at all: the file was handed over and
+     * nothing happened, so the screen has to stay where it is. */
+    InkViewStub::openBookSupported = false;
+    QVERIFY(!stats.openBook(path));
+    InkViewStub::openBookSupported = true;
+
     /* Deleted over USB while the app had the map: the path is checked again. */
     QVERIFY(QFile::remove(path));
     QVERIFY(stats.currentBook().value(QStringLiteral("filePath")).toString().isEmpty());

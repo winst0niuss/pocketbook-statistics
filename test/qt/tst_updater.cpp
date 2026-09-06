@@ -3,12 +3,12 @@
  * which release it picks out of a list, when it refuses one, and what it leaves
  * on disk for the handover. */
 #include <QCoreApplication>
-#include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QTemporaryDir>
 #include <QTest>
 
 #include "fixtures.h"
@@ -280,7 +280,10 @@ void TestUpdater::installRefusesAShortDownload()
 void TestUpdater::installRefusesAZipWithoutABinary_data()
 {
     QTest::addColumn<QByteArray>("zip");
-    const QString path = QDir::tempPath() + QStringLiteral("/updater-fixture.zip");
+    /* Built once here rather than per row: the rows are the four ways a
+     * download can be something other than our binary. */
+    QTemporaryDir dir;
+    const QString path = dir.path() + QStringLiteral("/candidate.zip");
 
     QTest::newRow("not a zip") << QByteArrayLiteral("nonsense, not an archive");
     QTest::newRow("no .app inside")

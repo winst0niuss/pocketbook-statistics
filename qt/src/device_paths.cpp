@@ -14,13 +14,9 @@ QString root()
 
 QString devicePath(const char *absolute)
 {
-    return devicePath(QString::fromLatin1(absolute));
-}
-
-QString devicePath(const QString &absolute)
-{
     const QString prefix = root();
-    return prefix.isEmpty() ? absolute : prefix + absolute;
+    return prefix.isEmpty() ? QString::fromLatin1(absolute)
+                            : prefix + QLatin1String(absolute);
 }
 
 QString appFilePath()

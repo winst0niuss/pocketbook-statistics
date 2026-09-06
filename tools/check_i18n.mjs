@@ -102,10 +102,10 @@ function callSitePlaceholders() {
 
 function listedLanguages() {
     const tr = readFileSync(join(qml, "Tr.qml"), "utf8");
-    const imports = new Set(
-        [...tr.matchAll(/^import\s+"i18n\/(\w+)\.js"\s+as\s+(\w+)$/gm)].map((m) => m[2]));
     const importedFile = new Map(
-        [...tr.matchAll(/^import\s+"i18n\/(\w+)\.js"\s+as\s+(\w+)$/gm)].map((m) => [m[2], m[1]]));
+        [...tr.matchAll(/^import\s+"i18n\/(\w+)\.js"\s+as\s+(\w+)$/gm)]
+            .map((m) => [m[2], m[1]]));
+    const imports = new Set(importedFile.keys());
     const table = new Map(
         [...tr.matchAll(/^\s+"(\w\w)":\s*(Lang\w+)/gm)].map((m) => [m[1], m[2]]));
 

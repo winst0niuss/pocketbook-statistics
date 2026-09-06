@@ -4,6 +4,7 @@
 #include <QDateTime>
 #include <QFile>
 #include <QFileInfo>
+#include <QDir>
 #include <QImage>
 #include <QThread>
 
@@ -47,6 +48,14 @@ void avoidMidnight()
             return;
         QThread::sleep(uint(left) + 1);
     }
+}
+
+/* Somewhere to build an archive before reading it back. One directory for the
+ * process, so two suites running side by side cannot write the same file. */
+QString scratch(const QString &name)
+{
+    static QTemporaryDir dir;
+    return dir.path() + QLatin1Char('/') + name;
 }
 
 QByteArray quoted(const QString &s)
@@ -156,7 +165,7 @@ QByteArray epub2(const QByteArray &cover)
         "<item id=\"chapter\" href=\"images/chapter.png\" media-type=\"image/png\"/>"
         "<item id=\"cover-img\" href=\"images/front.png\" media-type=\"image/png\"/>"
         "</manifest></package>";
-    const QString path = QDir::tempPath() + QStringLiteral("/fixture-epub2.epub");
+    const QString path = scratch(QStringLiteral("epub2.epub"));
     writeZip(path, {{QStringLiteral("META-INF/container.xml"), container},
                     {QStringLiteral("OEBPS/content.opf"), opf},
                     /* the chapter illustration is deliberately first and
@@ -182,7 +191,7 @@ QByteArray epub3(const QByteArray &cover)
         "<item id=\"c\" href=\"front.png\" media-type=\"image/png\""
         " properties=\"cover-image\"/>"
         "</manifest></package>";
-    const QString path = QDir::tempPath() + QStringLiteral("/fixture-epub3.epub");
+    const QString path = scratch(QStringLiteral("epub3.epub"));
     writeZip(path, {{QStringLiteral("META-INF/container.xml"), container},
                     {QStringLiteral("content.opf"), opf},
                     {QStringLiteral("front.png"), cover}});
@@ -214,7 +223,7 @@ QByteArray fb2(const QByteArray &cover)
 
 QByteArray fb2Zip(const QByteArray &cover)
 {
-    const QString path = QDir::tempPath() + QStringLiteral("/fixture.fb2.zip");
+    const QString path = scratch(QStringLiteral("book.fb2.zip"));
     writeZip(path, {{QStringLiteral("book.fb2"), fb2(cover)}});
     QFile f(path);
     f.open(QIODevice::ReadOnly);
@@ -226,7 +235,7 @@ QByteArray fb2Zip(const QByteArray &cover)
 
 QByteArray cbz(const QList<QPair<QString, QByteArray>> &pages)
 {
-    const QString path = QDir::tempPath() + QStringLiteral("/fixture.cbz");
+    const QString path = scratch(QStringLiteral("comic.cbz"));
     writeZip(path, pages);
     QFile f(path);
     f.open(QIODevice::ReadOnly);
@@ -271,11 +280,12 @@ void insertBook(const QString &explorerPath, const BookRow &book)
         const qint64 folderId = qHash(book.folder) % 100000;
         sql += "INSERT OR IGNORE INTO folders VALUES (" + QByteArray::number(folderId)
             + "," + quoted(book.folder) + ");";
-        sql += "INSERT INTO files VALUES (" + QByteArray::number(book.id) + ","
-            + QByteArray::number(book.storageId) + "," + quoted(book.filename) + ","
-            + QByteArray::number(folderId) + ","
-            + QByteArray::number(book.modificationTime) + ",x'"
-            + book.hash.toUtf8() + "');";
+        /* Internal storage and no modification time: the two columns exist
+         * because the cover query orders by them, and no test has needed to
+         * move either yet. */
+        sql += "INSERT INTO files VALUES (" + QByteArray::number(book.id)
+            + ",1," + quoted(book.filename) + ","
+            + QByteArray::number(folderId) + ",0,x'" + book.hash.toUtf8() + "');";
     }
     exec(explorerPath, sql);
 }
@@ -315,14 +325,4 @@ void setMeta(const QString &statsPath, const QString &key, qint64 value)
 {
     exec(statsPath, "INSERT OR REPLACE INTO meta (key,value) VALUES ("
          + quoted(key) + "," + QByteArray::number(value) + ");");
-}
-
-qint64 todayMidnight()
-{
-    return QDateTime(QDate::currentDate(), QTime(0, 0)).toSecsSinceEpoch();
-}
-
-qint64 todayNoon()
-{
-    return QDateTime(QDate::currentDate(), QTime(12, 0)).toSecsSinceEpoch();
 }

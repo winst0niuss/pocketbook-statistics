@@ -17,10 +17,9 @@ project(pocketbook-statistics-host-tests CXX C)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_AUTOMOC ON)
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml Quick Test QuickTest)
+# Brings AUTOMOC and the rest with it; the Q_OBJECT classes under test need it.
 qt_standard_project_setup()
 
 set(ROOT ${CMAKE_CURRENT_SOURCE_DIR}/..)
@@ -29,9 +28,11 @@ string(STRIP "${APP_VERSION}" APP_VERSION)
 
 enable_testing()
 
-# Everything under test, plus the two bundled amalgamations the device build
-# compiles in as well. The C core is here because the bridge calls straight
-# into it — its own asserts live in test/test_tracker.c.
+# Everything under test, and nothing else: no fixture and no stub is compiled
+# into this, so what the tests link is the app's own code. The two bundled
+# amalgamations come with it, as they do in the device build, and so does the C
+# core — the bridge calls straight into it, and its own asserts live in
+# test/test_tracker.c.
 qt_add_library(pbstats STATIC
   ${ROOT}/qt/src/book_cover.cpp
   ${ROOT}/qt/src/device_paths.cpp
@@ -47,8 +48,6 @@ qt_add_library(pbstats STATIC
   ${ROOT}/src/version.c
   ${ROOT}/qt/third_party/sqlite3.c
   ${ROOT}/qt/third_party/miniz.c
-  ${CMAKE_CURRENT_SOURCE_DIR}/qt/inkview_stub.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/qt/fixtures.cpp
 )
 target_include_directories(pbstats PUBLIC
   ${ROOT}/src ${ROOT}/qt/src ${ROOT}/qt/third_party
@@ -81,9 +80,19 @@ qt_add_resources(pbstats "app"
   BASE ${ROOT}/qt/qml
   FILES ${QRC_FILES})
 
+# The scaffolding: the stub that stands in for inkview_bridge.cpp, and the
+# fixtures. An object library rather than a static one, because pbstats leaves
+# the inkView* calls undefined and a static archive listed after it would come
+# too late on the link line.
+qt_add_library(pbfixtures OBJECT
+  ${CMAKE_CURRENT_SOURCE_DIR}/qt/inkview_stub.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/qt/fixtures.cpp
+)
+target_link_libraries(pbfixtures PUBLIC pbstats)
+
 foreach(name book_cover installer shim stats_bridge updater)
   add_executable(tst_${name} qt/tst_${name}.cpp)
-  target_link_libraries(tst_${name} PRIVATE pbstats)
+  target_link_libraries(tst_${name} PRIVATE pbfixtures)
   add_test(NAME ${name} COMMAND tst_${name})
 endforeach()
 
@@ -91,7 +100,7 @@ endforeach()
 # firmware's QML module, which exists only on the reader — test/qml/stubs is
 # what stands in for it.
 add_executable(tst_qml qml/main.cpp)
-target_link_libraries(tst_qml PRIVATE pbstats Qt6::Quick Qt6::QuickTest)
+target_link_libraries(tst_qml PRIVATE pbfixtures Qt6::Quick Qt6::QuickTest)
 target_compile_definitions(tst_qml PRIVATE
   QUICK_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/qml")
 add_test(NAME qml COMMAND tst_qml

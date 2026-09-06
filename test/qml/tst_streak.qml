@@ -22,6 +22,10 @@ TestCase {
         }
     }
 
+    /* The instantiation is half the test: the year is held in `yearInfo` and
+     * not in `y`, because an Item already has one, it is FINAL, and overriding
+     * it makes the whole document fail to compile — which reaches the reader as
+     * an app that no longer opens. */
     function test_the_year_arrives_whole() {
         var tab = createTemporaryObject(streak, testCase);
         verify(tab, "the tab did not instantiate");
@@ -35,15 +39,6 @@ TestCase {
         verify(tab.yearInfo.best >= fixture.streakDays);
         /* The whole year was measured in this fixture. */
         compare(tab.trackedFrom, 0);
-    }
-
-    /* Not `y`: an Item already has one, it is FINAL, and overriding it makes
-     * the document fail to compile — which reaches the reader as an app that
-     * no longer opens. */
-    function test_the_year_property_is_not_called_y() {
-        var tab = createTemporaryObject(streak, testCase);
-        compare(tab.y, 0);
-        verify(tab.yearInfo !== undefined);
     }
 
     /* Day of the year each month starts on. UTC arithmetic on purpose: two

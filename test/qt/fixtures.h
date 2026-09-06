@@ -1,7 +1,6 @@
 #pragma once
 
 #include <QByteArray>
-#include <QDir>
 #include <QList>
 #include <QPair>
 #include <QString>
@@ -76,8 +75,6 @@ struct BookRow {
     /* files/folders: a book still on the device has one, a deleted one none */
     QString folder;            /* empty = no files row at all */
     QString filename;
-    int storageId = 1;
-    qint64 modificationTime = 0;
 };
 
 void insertBook(const QString &explorerPath, const BookRow &book);
@@ -101,9 +98,3 @@ void insertSession(const QString &statsPath, const SessionRow &session);
 void insertOwnBook(const QString &statsPath, qint64 bookId, const QString &title,
                    const QString &author, const QString &coverKey);
 void setMeta(const QString &statsPath, const QString &key, qint64 value);
-
-/* Local midnight of the day the test runs in, and noon — the day-level SQL
- * groups by localtime, so a fixture built from a fixed epoch would land on a
- * different day depending on the machine. */
-qint64 todayMidnight();
-qint64 todayNoon();
