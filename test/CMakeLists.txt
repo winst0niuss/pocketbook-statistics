@@ -62,31 +62,24 @@ set_source_files_properties(
   ${ROOT}/qt/third_party/sqlite3.c ${ROOT}/qt/third_party/miniz.c
   PROPERTIES COMPILE_OPTIONS "-w")
 
-# The shipped resource: the shim script the installer writes, the launcher
-# icons, and the QML the screen tests instantiate.
+# The shipped resource, read out of the app's own .qrc rather than listed again
+# here: a QML file added there and forgotten here would be a screen the tests
+# quietly stop covering.
+file(READ ${ROOT}/qt/qml/pocketbook-statistics.qrc QRC_XML)
+string(REGEX MATCHALL "<file>[^<]+</file>" QRC_ENTRIES "${QRC_XML}")
+set(QRC_FILES "")
+foreach(entry ${QRC_ENTRIES})
+  string(REGEX REPLACE "</?file>" "" rel "${entry}")
+  list(APPEND QRC_FILES ${ROOT}/qt/qml/${rel})
+endforeach()
+list(LENGTH QRC_FILES QRC_COUNT)
+if(QRC_COUNT LESS 10)
+  message(FATAL_ERROR "read only ${QRC_COUNT} files out of the .qrc — the parse above is wrong")
+endif()
 qt_add_resources(pbstats "app"
   PREFIX "/"
   BASE ${ROOT}/qt/qml
-  FILES
-    ${ROOT}/qt/qml/qmldir
-    ${ROOT}/qt/qml/Tr.qml
-    ${ROOT}/qt/qml/main.qml
-    ${ROOT}/qt/qml/NavIcon.qml
-    ${ROOT}/qt/qml/PanelDialog.qml
-    ${ROOT}/qt/qml/BookDialog.qml
-    ${ROOT}/qt/qml/OverviewTab.qml
-    ${ROOT}/qt/qml/CalendarTab.qml
-    ${ROOT}/qt/qml/AboutTab.qml
-    ${ROOT}/qt/qml/StreakTab.qml
-    ${ROOT}/qt/qml/shim/open-book.sh
-    ${ROOT}/qt/qml/pocketbook-statistics.bmp
-    ${ROOT}/qt/qml/pocketbook-statistics_f.bmp
-)
-file(GLOB CATALOGS ${ROOT}/qt/qml/i18n/*.js)
-qt_add_resources(pbstats "catalogs"
-  PREFIX "/"
-  BASE ${ROOT}/qt/qml
-  FILES ${CATALOGS})
+  FILES ${QRC_FILES})
 
 foreach(name book_cover installer shim stats_bridge updater)
   add_executable(tst_${name} qt/tst_${name}.cpp)

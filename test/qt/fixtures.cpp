@@ -5,6 +5,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QImage>
+#include <QThread>
 
 #include <sqlite3.h>
 
@@ -29,6 +30,25 @@ void exec(const QString &dbPath, const QByteArray &sql)
     sqlite3_close(db);
 }
 
+/* Every fixture that says "today" is built from QDate::currentDate(), while the
+ * aggregates ask SQLite for 'now' in localtime. The two agree except across the
+ * instant the day changes: a run that starts a moment before midnight writes
+ * into a day the queries no longer call today, and the streak then comes out
+ * one short. The window is a fraction of a second wide and the suites take
+ * about half of one, so stand back from it — the same thing the C tests do,
+ * and for the same reason: freezing the clock would leave the day-level SQL
+ * untested against a real one. */
+void avoidMidnight()
+{
+    for (;;) {
+        const int left =
+            int(QTime::currentTime().msecsTo(QTime(23, 59, 59, 999)) / 1000) + 1;
+        if (left > 5)
+            return;
+        QThread::sleep(uint(left) + 1);
+    }
+}
+
 QByteArray quoted(const QString &s)
 {
     return "'" + QString(s).replace(QLatin1Char('\''), QLatin1String("''")).toUtf8() + "'";
@@ -40,6 +60,7 @@ QByteArray quoted(const QString &s)
 
 Device::Device()
 {
+    avoidMidnight();
     if (!dir_.isValid())
         qFatal("fixture: no temporary directory");
     qputenv("POCKETBOOK_STATISTICS_ROOT", dir_.path().toUtf8());
