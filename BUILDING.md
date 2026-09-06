@@ -59,10 +59,17 @@ make test
 Builds and runs `test/test_tracker.c` on the host. The asserts cover the
 session logic (how time is credited, page jumps, sleep, the split at midnight,
 recovery when the daemon was down, a reader switched off inside a book), the
-aggregates behind the screens (the reading streak, the year grid, the hand-set
-totals), the version comparison the updater runs on, and the two parts of the
-daemon that have a host build: whether it recognises one of its own in the
-pidfile, and the marks it leaves for the next start. No device needed. `make test` also runs `tools/check_qml.py`, which catches QML
+aggregates behind the screens (the streak, the year grid, per-book time and
+pace, the hand-set totals), the version comparison the updater runs on, the log
+rotation, and the two parts of the daemon that have a host build: whether it
+recognises one of its own in the pidfile, and the marks it leaves for the next
+start. No device needed.
+
+Paths are overridable so the tests can point the code at temporary files:
+`POCKETBOOK_STATISTICS_DB`, `_EXPLORER_DB`, `_PIDFILE`, `_PROC` and `_LOG`.
+
+What has no host build: `run_daemon()` and `spawn_daemon()` (a poll loop that
+never returns, and a fork), cover extraction, and everything in `qt/`. `make test` also runs `tools/check_qml.py`, which catches QML
 mistakes that pass qmllint and then break the app on the device.
 
 ## Icons
