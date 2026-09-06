@@ -29,6 +29,15 @@ test:
 	@python3 tools/check_qml.py
 	@$(MAKE) --no-print-directory i18ncheck
 
+# ---- Host tests for the Qt half: bridge, covers, installer, shim, updater ----
+# Needs cmake and a host Qt 6 (any 6.x — the device's own 6.8.2 is only for the
+# cross-build). Not part of `test`, because a checkout with neither still has
+# to be able to run the C tests. CI runs both.
+qt-test:
+	cmake -S test -B build-host
+	cmake --build build-host -j8
+	ctest --test-dir build-host --output-on-failure
+
 # ---- Build the app (single ELF, links the device's Qt at runtime) ----
 qt:
 	docker run --rm -v "$(CURDIR):/src" -w /src $(QT_IMG) bash -c '\
@@ -47,9 +56,9 @@ icons:
 	python3 tools/make_icon.py qt/qml
 
 clean:
-	rm -rf build build-qt
+	rm -rf build build-qt build-host
 
-.PHONY: sdk test qmlcheck i18ncheck qt deploy icons clean
+.PHONY: sdk test qmlcheck i18ncheck qt-test qt deploy icons clean
 
 # ---- Catalogs: the one part of the app nothing else compiles or runs ----
 # A missing key falls back to English on the device and says nothing; a renamed

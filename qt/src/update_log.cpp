@@ -16,7 +16,9 @@ void updateLog(const QString &line)
 
 QString updateLogTail(int lines)
 {
-    QFile f(QString::fromLatin1(PB_LOG_PATH));
+    /* pb_log_path(), not PB_LOG_PATH: the writer honours the environment
+     * override and the reader has to read the same file it wrote. */
+    QFile f(QString::fromLatin1(pb_log_path()));
     if (!f.open(QIODevice::ReadOnly))
         return {};
     const QStringList all = QString::fromUtf8(f.readAll())

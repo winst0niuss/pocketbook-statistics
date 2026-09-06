@@ -5,6 +5,7 @@
 #include <QDir>
 #include <QStringList>
 
+#include "device_paths.h"
 #include "update_log.h"
 
 namespace {
@@ -31,7 +32,7 @@ const QStringList &formats()
 
 QStringList readLines(const char *path)
 {
-    QFile f(QString::fromLatin1(path));
+    QFile f(devicePath(path));
     if (!f.open(QIODevice::ReadOnly))
         return {};
     const QString text = QString::fromUtf8(f.readAll());
@@ -88,7 +89,7 @@ QString withoutShim(const QString &entry)
 
 bool writeLines(const char *path, const QStringList &lines)
 {
-    QFile f(QString::fromLatin1(path));
+    QFile f(devicePath(path));
     if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate))
         return false;
     const QByteArray text = (lines.join(QLatin1Char('\n')) + QLatin1Char('\n')).toUtf8();
@@ -106,7 +107,7 @@ Shim::Shim(QObject *parent) : QObject(parent) {}
  * completes it instead of appearing to be done already. */
 bool Shim::installed() const
 {
-    if (!QFileInfo::exists(QString::fromLatin1(kScriptPath)))
+    if (!QFileInfo::exists(devicePath(kScriptPath)))
         return false;
     const QStringList lines = readLines(kUserExt);
     for (const QString &ext : formats()) {
@@ -123,10 +124,10 @@ void Shim::refresh()
      * format, and a device set up by hand — or by an older build — may name
      * only one. The script on disk is ours whatever the entries say, and
      * leaving a stale copy there is how a fix to it never reaches the reader. */
-    if (!QFileInfo::exists(QString::fromLatin1(kScriptPath)))
+    if (!QFileInfo::exists(devicePath(kScriptPath)))
         return;
     QFile src(QStringLiteral(":/shim/open-book.sh"));
-    QFile installedFile(QString::fromLatin1(kScriptPath));
+    QFile installedFile(devicePath(kScriptPath));
     if (!src.open(QIODevice::ReadOnly) || !installedFile.open(QIODevice::ReadOnly))
         return;
     const QByteArray shipped = src.readAll();
@@ -136,7 +137,7 @@ void Shim::refresh()
         return;
     /* Same write as install(), minus the extensions.cfg work: the entries are
      * already there and name a script that is about to be replaced in place. */
-    QFile out(QString::fromLatin1(kScriptPath));
+    QFile out(devicePath(kScriptPath));
     if (!out.open(QIODevice::WriteOnly | QIODevice::Truncate))
         return;
     if (out.write(shipped) != shipped.size() || !out.flush()) {
@@ -145,7 +146,7 @@ void Shim::refresh()
         return;
     }
     out.close();
-    QFile::setPermissions(QString::fromLatin1(kScriptPath),
+    QFile::setPermissions(devicePath(kScriptPath),
                           QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner
                               | QFile::ReadGroup | QFile::ExeGroup
                               | QFile::ReadOther | QFile::ExeOther);
@@ -154,7 +155,7 @@ void Shim::refresh()
 
 bool Shim::install()
 {
-    QDir().mkpath(QString::fromLatin1(kBinDir));
+    QDir().mkpath(devicePath(kBinDir));
 
     QFile src(QStringLiteral(":/shim/open-book.sh"));
     if (!src.open(QIODevice::ReadOnly)) {
@@ -164,9 +165,9 @@ bool Shim::install()
     const QByteArray script = src.readAll();
     src.close();
 
-    QFile out(QString::fromLatin1(kScriptPath));
+    QFile out(devicePath(kScriptPath));
     if (!out.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        updateLog(QStringLiteral("shim: cannot write %1").arg(QString::fromLatin1(kScriptPath)));
+        updateLog(QStringLiteral("shim: cannot write %1").arg(devicePath(kScriptPath)));
         return false;
     }
     const bool written = out.write(script) == script.size() && out.flush();
@@ -174,17 +175,17 @@ bool Shim::install()
     if (!written) {
         /* A half-written script would be run by the firmware and would not
          * reach its handover line, which means a book that does not open. */
-        QFile::remove(QString::fromLatin1(kScriptPath));
+        QFile::remove(devicePath(kScriptPath));
         updateLog(QStringLiteral("shim: short write, removed"));
         return false;
     }
-    QFile::setPermissions(QString::fromLatin1(kScriptPath),
+    QFile::setPermissions(devicePath(kScriptPath),
                           QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner
                               | QFile::ReadGroup | QFile::ExeGroup
                               | QFile::ReadOther | QFile::ExeOther);
 
-    if (!QFile::exists(QString::fromLatin1(kUserExtBackup)))
-        QFile::copy(QString::fromLatin1(kUserExt), QString::fromLatin1(kUserExtBackup));
+    if (!QFile::exists(devicePath(kUserExtBackup)))
+        QFile::copy(devicePath(kUserExt), devicePath(kUserExtBackup));
 
     QStringList lines = readLines(kUserExt);
     const QStringList sysLines = readLines(kSysExt);
@@ -207,7 +208,7 @@ bool Shim::install()
     }
 
     if (!writeLines(kUserExt, lines)) {
-        QFile::remove(QString::fromLatin1(kScriptPath));
+        QFile::remove(devicePath(kScriptPath));
         updateLog(QStringLiteral("shim: cannot write extensions.cfg, rolled back"));
         return false;
     }
@@ -229,7 +230,7 @@ bool Shim::remove()
             kept.append(stripped);
     }
     const bool cfgOk = writeLines(kUserExt, kept);
-    const bool fileOk = QFile::remove(QString::fromLatin1(kScriptPath));
+    const bool fileOk = QFile::remove(devicePath(kScriptPath));
     updateLog(QStringLiteral("shim: removed (cfg %1, script %2)")
                   .arg(cfgOk ? QStringLiteral("ok") : QStringLiteral("failed"),
                        fileOk ? QStringLiteral("ok") : QStringLiteral("failed")));

@@ -1,0 +1,19 @@
+# Stands in for the firmware's own QML module, which lives at /ebrmain/qml on
+# the reader and exists nowhere else — it is armel, and it is the reason the
+# screens cannot be run on a host at all without this directory.
+#
+# Only what the app actually uses is here: three singletons, the text element
+# every label is built on, the header and one checkbox. The numbers are the
+# ones measured on a PB629, so a layout test is checking against the geometry
+# the device really has.
+module com.pocketbook.controls
+
+singleton Global 1.0 Global.qml
+singleton GlobalValues 1.0 GlobalValues.qml
+# FontStyles is not here: its members are Heading2, BodyS and the like, and a
+# QML property name may not begin with a capital. It is set as a context
+# property from main.cpp instead, which has no such rule.
+
+StyledText 1.0 StyledText.qml
+AppHeader 1.0 AppHeader.qml
+CheckBox 1.0 CheckBox.qml
