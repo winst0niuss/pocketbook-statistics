@@ -11,7 +11,10 @@ matching Qt headers; you don't need Qt or an ARM toolchain on your host.
   automatically on first `make qt`.
 - **git**, **make**.
 - Optional: **Python 3 + Pillow** only if you want to regenerate the icons.
-- A C compiler and `libsqlite3` on the host for the unit tests (`make test`).
+- A C compiler and `libsqlite3` on the host for the C tests (`make test`), plus
+  node for the catalog check.
+- `cmake` and a host Qt 6 for the Qt and QML tests (`make qt-test`) — optional,
+  CI runs them on every push.
 
 ## One-time setup
 
@@ -68,9 +71,37 @@ start. No device needed.
 Paths are overridable so the tests can point the code at temporary files:
 `POCKETBOOK_STATISTICS_DB`, `_EXPLORER_DB`, `_PIDFILE`, `_PROC` and `_LOG`.
 
-What has no host build: `run_daemon()` and `spawn_daemon()` (a poll loop that
-never returns, and a fork), cover extraction, and everything in `qt/`. `make test` also runs `tools/check_qml.py`, which catches QML
-mistakes that pass qmllint and then break the app on the device.
+`make test` also runs `tools/check_qml.py`, which catches QML mistakes that pass
+qmllint and then break the app on the device, and `tools/check_i18n.mjs` (needs
+node), which reads the 29 catalogs and checks each against English: keys, list
+lengths, placeholders, plural arity, and the four places a language has to be
+listed. Keys no catalog has yet are recorded in `qt/qml/i18n/untranslated.json`;
+a new gap fails, and translating one means the row has to go.
+
+```bash
+make qt-test
+```
+
+The Qt half, against a host Qt 6 — any 6.x, since the device's own 6.8.2 only
+matters to the binary that ships. Needs `cmake` and Qt 6 (`Core Gui Qml Quick
+Test QuickTest`); CI installs `qt6-base-dev qt6-declarative-dev` plus the
+`qml6-module-*` runtime modules. It builds `test/CMakeLists.txt`, a project of
+its own that never touches the cross-build, and covers cover extraction for
+every format the app reads itself, the launcher entry, the shim's two writes to
+the user partition, the update path from the release list to the staged binary,
+and all four aggregates of the bridge over a seeded pair of databases — plus the
+screens themselves, instantiated against a stub of the firmware's QML module at
+the metrics measured on a PB629.
+
+Every device path goes through `devicePath()`, so `POCKETBOOK_STATISTICS_ROOT`
+moves the whole of `/mnt/ext1` into a temporary directory; `_APP` names the
+installed binary and `_NO_HANDOVER` stops the updater starting the swap script.
+`inkview_bridge.cpp` is the one file with no host build — the firmware's own
+calls are resolved with `dlsym` out of the reader's `libinkview.so` — and
+`test/qt/inkview_stub.cpp` stands in for it, scripted per test.
+
+What still has no host build at all: `run_daemon()` and `spawn_daemon()` (a poll
+loop that never returns, and a fork), `main.cpp`, and `inkview_bridge.cpp`.
 
 ## Icons
 
@@ -91,8 +122,8 @@ qt/qml/         the UI (com.pocketbook.controls) + icons
 qt/qml/i18n/    one string catalog per language, driven by Tr.qml
 qt/third_party/ vendored sqlite3 + miniz (source only)
 third_party/    pocketbook-sdk-qt6 (fetched by `make sdk`, git-ignored)
-test/           host-side unit tests
-tools/          icon generator, QML checker
+test/           host-side tests: C asserts, the Qt suites and the QML ones
+tools/          icon generator, QML checker, catalog checker
 ```
 
 ## How the pieces fit

@@ -26,9 +26,42 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
       - run: make test
 
+  # The Qt half: the bridge, the cover extraction, the installer, the shim, the
+  # updater and the screens themselves — none of which the C tests reach, and
+  # none of which the cross-build does more than compile. Any host Qt 6 will do;
+  # the device's own 6.8.2 matters only to the binary that ships.
+  qt-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install a host Qt 6
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake ninja-build qt6-base-dev qt6-declarative-dev \
+            qml6-module-qtqml qml6-module-qtqml-workerscript \
+            qml6-module-qtquick qml6-module-qtquick-window \
+            qml6-module-qttest libgl1-mesa-dev
+      - run: cmake -S test -B build-host -G Ninja -DCMAKE_CXX_FLAGS=--coverage -DCMAKE_C_FLAGS=--coverage -DCMAKE_EXE_LINKER_FLAGS=--coverage
+      - run: cmake --build build-host
+      - run: ctest --test-dir build-host --output-on-failure
+      # Informational, and deliberately not a gate: what is left uncovered is
+      # almost all the defensive half of an "if the write failed" pair, and a
+      # threshold would only invite tests written to move a number.
+      - name: What the tests reached
+        run: |
+          pip install --quiet gcovr
+          { echo '```'; gcovr --root . --filter 'qt/src/' --txt; echo '```'; } \
+            >> "$GITHUB_STEP_SUMMARY"
+
   # Cross-compile in the SDK image and publish PocketBookStatistics.zip.
   build:
     runs-on: ubuntu-latest
+    # Nothing is published over a failing test. This job is the one that writes
+    # a release, and the two above take about a minute between them against the
+    # five this one needs — so the wait costs the pipeline nothing, and a build
+    # that reached a reader while a test was red would cost a version.
+    needs: [test, qt-test]
     permissions:
       contents: write # gh release create
       pull-requests: write # the comment naming the candidate

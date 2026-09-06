@@ -1,0 +1,250 @@
+{
+  "az": [
+    "about.shim",
+    "about.shimHint",
+    "overview.currentBook",
+    "overview.minutesToday",
+    "overview.today",
+    "plural.booksFinished",
+    "plural.minutesToday",
+    "plural.totalHours"
+  ],
+  "bg": [
+    "about.shim",
+    "about.shimHint",
+    "overview.currentBook",
+    "overview.minutesToday",
+    "overview.today",
+    "plural.booksFinished",
+    "plural.minutesToday",
+    "plural.totalHours"
+  ],
+  "cs": [
+    "about.shim",
+    "about.shimHint",
+    "overview.currentBook",
+    "overview.minutesToday",
+    "overview.today",
+    "plural.booksFinished",
+    "plural.minutesToday",
+    "plural.totalHours"
+  ],
+  "da": [
+    "about.shim",
+    "about.shimHint",
+    "overview.currentBook",
+    "overview.minutesToday",
+    "overview.today",
+    "plural.booksFinished",
+    "plural.minutesToday",
+    "plural.totalHours"
+  ],
+  "de": [
+    "plural.booksFinished",
+    "plural.minutesToday",
+    "plural.totalHours"
+  ],
+  "el": [
+    "about.shim",
+    "about.shimHint",
+    "overview.currentBook",
+    "overview.minutesToday",
+    "overview.today",
+    "plural.booksFinished",
+    "plural.minutesToday",
+    "plural.totalHours"
+  ],
+  "es": [
+    "about.shim",
+    "about.shimHint",
+    "plural.booksFinished",
+    "plural.minutesToday",
+    "plural.totalHours"
+  ],
+  "et": [
+    "about.shim",
+    "about.shimHint",
+    "overview.currentBook",
+    "overview.minutesToday",
+    "overview.today",
+    "plural.booksFinished",
+    "plural.minutesToday",
+    "plural.totalHours"
+  ],
+  "fi": [
+    "about.shim",
+    "about.shimHint",
+    "overview.currentBook",
+    "overview.minutesToday",
+    "overview.today",
+    "plural.booksFinished",
+    "plural.minutesToday",
+    "plural.totalHours"
+  ],
+  "fr": [
+    "about.shim",
+    "about.shimHint",
+    "plural.booksFinished",
+    "plural.minutesToday",
+    "plural.totalHours"
+  ],
+  "hr": [
+    "about.shim",
+    "about.shimHint",
+    "overview.currentBook",
+    "overview.minutesToday",
+    "overview.today",
+    "plural.booksFinished",
+    "plural.minutesToday",
+    "plural.totalHours"
+  ],
+  "hu": [
+    "about.shim",
+    "about.shimHint",
+    "overview.currentBook",
+    "overview.minutesToday",
+    "overview.today",
+    "plural.booksFinished",
+    "plural.minutesToday",
+    "plural.totalHours"
+  ],
+  "it": [
+    "about.shim",
+    "about.shimHint",
+    "plural.booksFinished",
+    "plural.minutesToday",
+    "plural.totalHours"
+  ],
+  "kk": [
+    "about.shim",
+    "about.shimHint",
+    "overview.currentBook",
+    "overview.minutesToday",
+    "overview.today",
+    "plural.booksFinished",
+    "plural.minutesToday",
+    "plural.totalHours"
+  ],
+  "lt": [
+    "about.shim",
+    "about.shimHint",
+    "overview.currentBook",
+    "overview.minutesToday",
+    "overview.today",
+    "plural.booksFinished",
+    "plural.minutesToday",
+    "plural.totalHours"
+  ],
+  "lv": [
+    "about.shim",
+    "about.shimHint",
+    "overview.currentBook",
+    "overview.minutesToday",
+    "overview.today",
+    "plural.booksFinished",
+    "plural.minutesToday",
+    "plural.totalHours"
+  ],
+  "nb": [
+    "about.shim",
+    "about.shimHint",
+    "overview.currentBook",
+    "overview.minutesToday",
+    "overview.today",
+    "plural.booksFinished",
+    "plural.minutesToday",
+    "plural.totalHours"
+  ],
+  "nl": [
+    "about.shim",
+    "about.shimHint",
+    "overview.currentBook",
+    "overview.minutesToday",
+    "overview.today",
+    "plural.booksFinished",
+    "plural.minutesToday",
+    "plural.totalHours"
+  ],
+  "pl": [
+    "about.shim",
+    "about.shimHint",
+    "plural.booksFinished",
+    "plural.minutesToday",
+    "plural.totalHours"
+  ],
+  "pt": [
+    "about.shim",
+    "about.shimHint",
+    "overview.currentBook",
+    "overview.minutesToday",
+    "overview.today",
+    "plural.booksFinished",
+    "plural.minutesToday",
+    "plural.totalHours"
+  ],
+  "ro": [
+    "about.shim",
+    "about.shimHint",
+    "overview.currentBook",
+    "overview.minutesToday",
+    "overview.today",
+    "plural.booksFinished",
+    "plural.minutesToday",
+    "plural.totalHours"
+  ],
+  "sk": [
+    "about.shim",
+    "about.shimHint",
+    "overview.currentBook",
+    "overview.minutesToday",
+    "overview.today",
+    "plural.booksFinished",
+    "plural.minutesToday",
+    "plural.totalHours"
+  ],
+  "sl": [
+    "about.shim",
+    "about.shimHint",
+    "overview.currentBook",
+    "overview.minutesToday",
+    "overview.today",
+    "plural.booksFinished",
+    "plural.minutesToday",
+    "plural.totalHours"
+  ],
+  "sr": [
+    "about.shim",
+    "about.shimHint",
+    "overview.currentBook",
+    "overview.minutesToday",
+    "overview.today",
+    "plural.booksFinished",
+    "plural.minutesToday",
+    "plural.totalHours"
+  ],
+  "sv": [
+    "about.shim",
+    "about.shimHint",
+    "overview.currentBook",
+    "overview.minutesToday",
+    "overview.today",
+    "plural.booksFinished",
+    "plural.minutesToday",
+    "plural.totalHours"
+  ],
+  "tr": [
+    "about.shim",
+    "about.shimHint",
+    "overview.currentBook",
+    "overview.minutesToday",
+    "overview.today",
+    "plural.booksFinished",
+    "plural.minutesToday",
+    "plural.totalHours"
+  ],
+  "uk": [
+    "plural.booksFinished",
+    "plural.minutesToday",
+    "plural.totalHours"
+  ]
+}
