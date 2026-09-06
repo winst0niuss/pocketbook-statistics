@@ -49,7 +49,7 @@ function duplicateKeys(file) {
     const src = readFileSync(join(i18n, file), "utf8");
     const seen = new Set();
     const dupes = [];
-    for (const m of src.matchAll(/^\s{4}"([^"]+)"\s*:/gm)) {
+    for (const m of src.matchAll(/^\s+"([^"]+)"\s*:/gm)) {
         if (seen.has(m[1]))
             dupes.push(m[1]);
         seen.add(m[1]);
@@ -141,7 +141,6 @@ const gaps = {}; /* what is actually missing right now, per catalog */
 
 const english = loadCatalog("en.js");
 const provided = callSitePlaceholders();
-const catalogs = new Map();
 
 for (const file of files) {
     let cat;
@@ -159,8 +158,6 @@ for (const file of files) {
         fail(file, "exports no `plural(n)` function");
         continue;
     }
-    catalogs.set(file, cat);
-
     for (const key of duplicateKeys(file))
         fail(file, `"${key}" appears twice — the second entry wins and the first is dead`);
 
