@@ -15,6 +15,12 @@
 /* Spelled once: update_log.cpp reads the same file to show its tail. */
 #define PB_LOG_PATH STATS_DIR "/app.log"
 
+/* The file that is actually written. PB_LOG_PATH on the device, and
+ * POCKETBOOK_STATISTICS_LOG where it is set — which is how the host tests get
+ * to exercise the rotation, the one thing here that can damage a log rather
+ * than merely add to it. */
+const char *pb_log_path(void);
+
 #ifdef __cplusplus
 extern "C" {
 #endif

@@ -359,6 +359,13 @@ QList<FinishedBook> finishedBooks(bool withCovers)
 
 QVariantMap StatsBridge::overall()
 {
+    /* Without a database there is nothing to say. SQLite answers a null handle
+     * with SQLITE_MISUSE rather than a crash, so every query would quietly
+     * return zero and the screen would read as "you have not read anything".
+     * An empty map is at least honest, and the constructor has already logged
+     * why the file could not be opened. Every aggregate below does the same. */
+    if (!db_)
+        return {};
     catchUp();
     overall_stats o;
     stats_overall(db_, &o);
@@ -388,6 +395,8 @@ QVariantMap StatsBridge::overall()
 
 QVariantMap StatsBridge::currentBook()
 {
+    if (!db_)
+        return {};
     catchUp();
     QVariantMap m;
     pb_state s;
@@ -441,6 +450,8 @@ QVariantMap StatsBridge::currentBook()
 
 QVariantMap StatsBridge::month(int year, int mon)
 {
+    if (!db_)
+        return {};
     catchUp();
     QVariantMap m;
     const QDate first(year, mon, 1);
@@ -582,6 +593,8 @@ QVariantMap StatsBridge::month(int year, int mon)
  * unknown, the way the calendar does. */
 QVariantMap StatsBridge::year(int y)
 {
+    if (!db_)
+        return {};
     catchUp();
     QVariantMap m;
     const QDate first(y, 1, 1);
@@ -636,6 +649,8 @@ QVariantMap StatsBridge::year(int y)
  * "282.4 hours" is not a figure anybody typed. */
 void StatsBridge::setTotalHours(double hours)
 {
+    if (!db_)
+        return;
     if (hours < 0) {
         stats_meta_set_int(db_, META_OFFSET_SECONDS, 0);
         return;
@@ -648,6 +663,8 @@ void StatsBridge::setTotalHours(double hours)
 
 void StatsBridge::setBooksFinished(int books)
 {
+    if (!db_)
+        return;
     if (books < 0) {
         stats_meta_set_int(db_, META_OFFSET_BOOKS, 0);
         return;

@@ -1,11 +1,14 @@
 /* Host test: session derivation from explorer-3-like snapshots. */
 #include "../src/tracker.h"
+#include "../src/daemon.h"
+#include "../src/log.h"
 #include "../src/stats_db.h"
 #include "../src/version.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -74,6 +77,30 @@ static void set_since(sqlite3 *db, const char *value_sql)
     ex(db, sql);
 }
 
+/* Every scenario below that says "today" asks the C library for it, while the
+ * aggregates ask SQLite ('now', 'localtime'). The two agree except across the
+ * instant the day changes, and a run that starts a moment before midnight
+ * finishes in a day the sessions were not written into: the streak then counts
+ * from yesterday and comes out one short. The window is a fraction of a second
+ * wide and the suite takes about a tenth of one, so simply stand back from it.
+ *
+ * Waiting is the honest fix here. Freezing the clock would leave the day-level
+ * SQL — the part that actually decides what a day is — untested against a real
+ * one. */
+static void avoid_midnight(void)
+{
+    for (;;) {
+        const time_t now = time(NULL);
+        struct tm lt;
+        localtime_r(&now, &lt);
+        const int left = (23 - lt.tm_hour) * 3600 + (59 - lt.tm_min) * 60
+                         + (60 - lt.tm_sec);
+        if (left > 5)
+            return;
+        sleep((unsigned)left + 1);
+    }
+}
+
 /* Today at noon: scenarios that need real timestamps must not straddle a local
  * midnight, and a session opened in 1970 would be split at every one since. */
 static long today_noon(void)
@@ -110,6 +137,162 @@ static long q1(sqlite3 *db, const char *sql)
         v = (long)sqlite3_column_int64(st, 0);
     sqlite3_finalize(st);
     return v;
+}
+
+/* Switched off inside a book. The firmware saves the position on the way down
+ * and stamps a fresh opentime on the way up, so the save is older than the open
+ * that follows it. Taken from a real device, where 14 minutes and 10 turned
+ * pages arrived as a day with no reading at all: the new session's own window
+ * is zero seconds wide, and ten pages inside it read as a jump. */
+static void test_reopen_after_poweroff(sqlite3 *exp)
+{
+    const char *db_path = "/tmp/bs_test_reopen.db";
+    unlink(db_path);
+    tracker t;
+    assert(tracker_init(&t, db_path, EXP_DB) == 0);
+    set_since(t.stats, "0");
+
+    const long t0 = today_noon();
+    char sql[256];
+
+    /* The book is opened and the firmware saves the position in the same
+     * second: a session with nothing in it yet. */
+    set_state(exp, t0, t0, 123);
+    pb_state s;
+    assert(tracker_read_state(EXP_DB, &s) == 0);
+    assert(tracker_observe(&t, &s) == 1);
+    assert(q1(t.stats, "SELECT COUNT(*) FROM sessions") == 1);
+
+    /* 14 minutes of reading, ten pages, and the one save that recorded it
+     * lands while nothing is polling — the reader is on its way off. Then it
+     * comes back up: a fresh daemon, and an opentime stamped after that save. */
+    tracker_close(&t);
+    assert(tracker_init(&t, db_path, EXP_DB) == 0);
+    set_state(exp, t0 + 890, t0 + 838, 133);
+    assert(tracker_read_state(EXP_DB, &s) == 0);
+    assert(tracker_observe(&t, &s) == 1);
+
+    /* The stretch belongs to the row that was open when it was read. */
+    snprintf(sql, sizeof(sql),
+             "SELECT active_seconds FROM sessions WHERE start_time=%ld", t0);
+    assert(q1(t.stats, sql) == 838);
+    snprintf(sql, sizeof(sql),
+             "SELECT pages_read FROM sessions WHERE start_time=%ld", t0);
+    assert(q1(t.stats, sql) == 10);
+    /* The reopen is still a session of its own, and it starts empty. */
+    assert(q1(t.stats, "SELECT COUNT(*) FROM sessions") == 2);
+    snprintf(sql, sizeof(sql),
+             "SELECT active_seconds FROM sessions WHERE start_time=%ld",
+             t0 + 890);
+    assert(q1(t.stats, sql) == 0);
+
+    /* Seen twice is paid once: update_session only moves a row's end forward,
+     * and the app's catchUp() observes the same state seconds later. */
+    assert(tracker_read_state(EXP_DB, &s) == 0);
+    tracker_observe(&t, &s);
+    snprintf(sql, sizeof(sql),
+             "SELECT active_seconds FROM sessions WHERE start_time=%ld", t0);
+    assert(q1(t.stats, sql) == 838);
+    assert(q1(t.stats, "SELECT COUNT(*) FROM sessions") == 2);
+
+    /* A move backwards before the reopen buys nothing either: the reader went
+     * to a bookmark, and what is read from there is credited by the
+     * observations that follow. */
+    tracker_close(&t);
+    unlink(db_path);
+    assert(tracker_init(&t, db_path, EXP_DB) == 0);
+    set_since(t.stats, "0");
+    set_state(exp, t0, t0, 123);
+    assert(tracker_read_state(EXP_DB, &s) == 0);
+    assert(tracker_observe(&t, &s) == 1);
+    tracker_close(&t);
+    assert(tracker_init(&t, db_path, EXP_DB) == 0);
+    set_state(exp, t0 + 890, t0 + 838, 40);
+    assert(tracker_read_state(EXP_DB, &s) == 0);
+    assert(tracker_observe(&t, &s) == 1);
+    snprintf(sql, sizeof(sql),
+             "SELECT active_seconds FROM sessions WHERE start_time=%ld", t0);
+    assert(q1(t.stats, sql) == 0);
+
+    /* A jump before the reopen is still navigation: 300 pages in a minute is
+     * a link to the notes at the back, not a minute of reading. */
+    tracker_close(&t);
+    unlink(db_path);
+    assert(tracker_init(&t, db_path, EXP_DB) == 0);
+    set_since(t.stats, "0");
+    set_state(exp, t0, t0, 123);
+    assert(tracker_read_state(EXP_DB, &s) == 0);
+    assert(tracker_observe(&t, &s) == 1);
+    tracker_close(&t);
+    assert(tracker_init(&t, db_path, EXP_DB) == 0);
+    set_state(exp, t0 + 120, t0 + 60, 423);
+    assert(tracker_read_state(EXP_DB, &s) == 0);
+    assert(tracker_observe(&t, &s) == 1);
+    snprintf(sql, sizeof(sql),
+             "SELECT active_seconds FROM sessions WHERE start_time=%ld", t0);
+    assert(q1(t.stats, sql) == 0);
+
+    tracker_close(&t);
+    unlink(db_path);
+}
+
+/* The same power-off, across a local midnight. The stretch belongs to two days
+ * and has to be written as two rows: every day-level figure groups by
+ * date(end_time), so one row holding both would move the whole evening onto
+ * the new day. */
+static void test_reopen_across_midnight(sqlite3 *exp)
+{
+    const char *db_path = "/tmp/bs_test_reopen_mid.db";
+    unlink(db_path);
+    tracker t;
+    assert(tracker_init(&t, db_path, EXP_DB) == 0);
+    set_since(t.stats, "0");
+
+    const long midnight = today_midnight();
+    const long opened = midnight - 1200; /* 23:40, and reading from there */
+    char sql[256];
+    pb_state s;
+
+    set_state(exp, opened, opened, 100);
+    assert(tracker_read_state(EXP_DB, &s) == 0);
+    assert(tracker_observe(&t, &s) == 1);
+
+    /* Switched off at 00:10 and back on at 00:15: the save predates the open,
+     * 20 pages across half an hour that straddles the day boundary. */
+    tracker_close(&t);
+    assert(tracker_init(&t, db_path, EXP_DB) == 0);
+    set_state(exp, midnight + 900, midnight + 600, 120);
+    assert(tracker_read_state(EXP_DB, &s) == 0);
+    assert(tracker_observe(&t, &s) == 1);
+
+    /* 1800 seconds, split where the day is: 1200 before, 600 after. */
+    snprintf(sql, sizeof(sql),
+             "SELECT active_seconds FROM sessions WHERE start_time=%ld", opened);
+    assert(q1(t.stats, sql) == 1200);
+    snprintf(sql, sizeof(sql),
+             "SELECT active_seconds FROM sessions WHERE start_time=%ld", midnight);
+    assert(q1(t.stats, sql) == 600);
+    /* Neither row carries seconds across the boundary. */
+    snprintf(sql, sizeof(sql),
+             "SELECT COUNT(*) FROM sessions WHERE date(end_time,'unixepoch','localtime')"
+             " <> date(end_time - active_seconds + 1,'unixepoch','localtime')");
+    assert(q1(t.stats, sql) == 0);
+    /* And the pages went with the seconds, in the same proportion: two thirds
+     * of the window fell before midnight, so two thirds of the pages did.
+     * Checking only the sum would let a split that gives one side everything
+     * pass, and then a day's pace would be built on pages nobody read in it. */
+    snprintf(sql, sizeof(sql),
+             "SELECT pages_read FROM sessions WHERE start_time=%ld", opened);
+    const long pages_before = q1(t.stats, sql);
+    snprintf(sql, sizeof(sql),
+             "SELECT pages_read FROM sessions WHERE start_time=%ld", midnight);
+    const long pages_after = q1(t.stats, sql);
+    assert(pages_before == 13); /* 20 * 1200 / 1800, rounded down */
+    assert(pages_after == 7);
+    assert(pages_before + pages_after == 20);
+
+    tracker_close(&t);
+    unlink(db_path);
 }
 
 /* The streak on the About screen: days in a row with reading, counted back
@@ -210,6 +393,17 @@ static void test_manual_totals(void)
     assert(stats_meta_int(t.stats, META_OFFSET_SECONDS) == 10 * 3600);
     assert(stats_meta_int(t.stats, META_OFFSET_BOOKS) == 3);
 
+    /* The same rule on the Overview's own pace: an estimate is wall clock
+     * reconstructed after the fact, so it may not divide into pages. */
+    overall_stats est;
+    ex(t.stats, "INSERT INTO sessions (book_id,start_time,end_time,"
+                " active_seconds,pages_start,pages_end,recovered,pages_read)"
+                " VALUES (7,20000,23600,3600,1,900,1,899)");
+    assert(stats_overall(t.stats, &est) == 0);
+    assert(est.pages_per_min == before.pages_per_min);
+    assert(est.total_hours > before.total_hours); /* but the hours are real */
+    ex(t.stats, "DELETE FROM sessions WHERE start_time=20000");
+
     /* The measurement is untouched: the offset is added where the card is
      * built, and the pace, today and the streak never see it. */
     overall_stats after;
@@ -230,6 +424,383 @@ static void test_manual_totals(void)
     assert(tracker_init(&t, db_path, EXP_DB) == 0);
     assert(stats_meta_int(t.stats, META_OFFSET_SECONDS) == 0);
     assert(stats_meta_int(t.stats, META_OFFSET_BOOKS) == 3);
+
+    tracker_close(&t);
+    unlink(db_path);
+}
+
+/* The year the streak screen draws. The day of the year is what indexes the
+ * grid, so the ends of it and a leap year are where an off-by-one would live,
+ * and a session from another year must not appear at all. */
+static void test_year_days(void)
+{
+    const char *db_path = "/tmp/bs_test_year.db";
+    unlink(db_path);
+    tracker t;
+    assert(tracker_init(&t, db_path, EXP_DB) == 0);
+    set_since(t.stats, "0");
+
+    /* 2024 was a leap year: 366 days, and 29 February is one of them. */
+    struct tm d;
+    memset(&d, 0, sizeof(d));
+    d.tm_year = 124; /* 2024 */
+    d.tm_mday = 1;
+    d.tm_hour = 12;
+    d.tm_isdst = -1;
+    const long jan1 = (long)mktime(&d);
+    d.tm_mon = 1;
+    d.tm_mday = 29;
+    d.tm_isdst = -1;
+    const long feb29 = (long)mktime(&d);
+    d.tm_mon = 11;
+    d.tm_mday = 31;
+    d.tm_isdst = -1;
+    const long dec31 = (long)mktime(&d);
+    /* And one the year does not own. */
+    d.tm_year = 125;
+    d.tm_mon = 0;
+    d.tm_mday = 3;
+    d.tm_isdst = -1;
+    const long next_year = (long)mktime(&d);
+
+    char sql[256];
+    const long days[] = {jan1, feb29, dec31, next_year};
+    for (unsigned i = 0; i < sizeof(days) / sizeof(days[0]); i++) {
+        snprintf(sql, sizeof(sql),
+                 "INSERT INTO sessions (book_id,start_time,end_time,"
+                 " active_seconds,pages_start,pages_end,recovered,pages_read)"
+                 " VALUES (7,%ld,%ld,900,1,10,0,9)", days[i] - 900, days[i]);
+        ex(t.stats, sql);
+    }
+
+    unsigned char grid[366];
+    memset(grid, 0, sizeof(grid));
+    assert(stats_year_days(t.stats, 2024, grid, 366) == 3);
+    assert(grid[0] == 1);   /* 1 January is index 0 */
+    assert(grid[59] == 1);  /* 29 February, which only a leap year has */
+    assert(grid[365] == 1); /* 31 December of a 366-day year */
+    /* Nothing from the year after it. */
+    memset(grid, 0, sizeof(grid));
+    assert(stats_year_days(t.stats, 2025, grid, 365) == 1);
+    assert(grid[2] == 1);
+
+    /* A day under the minute does not count, here or in the streak. */
+    ex(t.stats, "UPDATE sessions SET active_seconds = 30");
+    memset(grid, 0, sizeof(grid));
+    assert(stats_year_days(t.stats, 2024, grid, 366) == 0);
+
+    tracker_close(&t);
+    unlink(db_path);
+}
+
+/* The log is the only debugger this app has, and the rotation is the one part
+ * of it that can damage a log rather than add to it: at 64 KB the file is
+ * halved, keeping the newest 32 KB. Nothing checked that until now, because on
+ * a host the writer aimed at a device path that does not exist. */
+static void test_log_rotation(void)
+{
+    const char *log_path = "/tmp/bs_test_app.log";
+    unlink(log_path);
+    setenv("POCKETBOOK_STATISTICS_LOG", log_path, 1);
+    assert(strcmp(pb_log_path(), log_path) == 0);
+
+    /* Each line is stamped and about 60 bytes, so this comfortably passes the
+     * 64 KB mark and rotates on the way. */
+    for (int i = 0; i < 1600; i++)
+        pb_log("line %06d 0123456789012345678901234567890123456789", i);
+
+    struct stat st;
+    assert(stat(log_path, &st) == 0);
+    /* Halved, not emptied, and not left to grow. */
+    assert(st.st_size > 16 * 1024);
+    assert(st.st_size < 64 * 1024);
+
+    FILE *f = fopen(log_path, "r");
+    assert(f != NULL);
+    char first[512] = {0}, last[512] = {0};
+    assert(fgets(first, sizeof(first), f) != NULL);
+    while (fgets(last, sizeof(last), f))
+        ;
+    fclose(f);
+
+    /* The newest line survived: it is the one worth keeping. */
+    assert(strstr(last, "line 001599") != NULL);
+    /* And the oldest kept line is a whole line, not the tail of one the seek
+     * landed in the middle of. */
+    assert(strstr(first, " line 0") != NULL);
+    assert(first[0] >= '0' && first[0] <= '9'); /* the timestamp is intact */
+
+    /* Nothing is left behind: the temporary copy is renamed, never dropped. */
+    char tmp[256];
+    snprintf(tmp, sizeof(tmp), "%s.%d", log_path, (int)getpid());
+    assert(stat(tmp, &st) != 0);
+
+    unlink(log_path);
+    unsetenv("POCKETBOOK_STATISTICS_LOG");
+    assert(strcmp(pb_log_path(), PB_LOG_PATH) == 0);
+}
+
+/* An explorer-3 old enough to have no books_fast_hashes. The cover key then
+ * comes from the file's own hash instead, which is the whole point of keeping
+ * a second statement around: losing tracking over a cover key would be a poor
+ * trade. Firmware this old has not been seen, but the fallback is written and
+ * so it is worth knowing that it works. */
+static void test_legacy_schema(void)
+{
+    const char *exp_path = "/tmp/bs_test_legacy_explorer.db";
+    const char *db_path = "/tmp/bs_test_legacy.db";
+    unlink(exp_path);
+    unlink(db_path);
+
+    sqlite3 *old_exp;
+    assert(sqlite3_open(exp_path, &old_exp) == SQLITE_OK);
+    ex(old_exp, "CREATE TABLE books_impl (id INTEGER PRIMARY KEY, title TEXT, author TEXT);"
+                "CREATE TABLE files (book_id INTEGER, storageid INTEGER, fast_hash BLOB);"
+                "CREATE TABLE books_settings (bookid INTEGER, profileid INTEGER,"
+                " position TEXT, position_ts INTEGER, cpage INTEGER, npage INTEGER,"
+                " opentime INTEGER, completed INTEGER);");
+    ex(old_exp, "INSERT INTO books_impl VALUES (3,'Altbuch','Autorin');"
+                "INSERT INTO files VALUES (3,1,x'ccdd');"
+                "INSERT INTO books_settings VALUES (3,1,'p',2000,5,200,1900,0);");
+
+    pb_state s;
+    assert(tracker_read_state(exp_path, &s) == 0);
+    assert(s.bookid == 3);
+    assert(strcmp(s.title, "Altbuch") == 0);
+    /* The key is there, taken from files because the hash table is not. */
+    assert(strcmp(s.cover, "ccdd") == 0);
+
+    /* And a session derived from it is an ordinary session. */
+    tracker t;
+    assert(tracker_init(&t, db_path, exp_path) == 0);
+    assert(tracker_observe(&t, &s) == 1);
+    assert(q1(t.stats, "SELECT COUNT(*) FROM sessions WHERE book_id=3") == 1);
+
+    tracker_close(&t);
+    sqlite3_close(old_exp);
+    unlink(exp_path);
+    unlink(db_path);
+}
+
+/* Per-book totals, which the Overview turns into "about 5h 22m left". The
+ * pace is the half worth testing: it divides pages by the minutes they were
+ * read in, and both sides have to exclude what was never measured. */
+static void test_stats_book(void)
+{
+    const char *db_path = "/tmp/bs_test_book.db";
+    unlink(db_path);
+    tracker t;
+    assert(tracker_init(&t, db_path, EXP_DB) == 0);
+    set_since(t.stats, "0");
+
+    int64_t secs = -1;
+    double ppm = -1;
+    /* A book with nothing recorded answers zero, not a stale value. */
+    stats_book(t.stats, 7, &secs, &ppm);
+    assert(secs == 0 && ppm == 0);
+
+    /* Sixty pages over an hour: one page a minute. */
+    ex(t.stats, "INSERT INTO sessions (book_id,start_time,end_time,"
+                " active_seconds,pages_start,pages_end,recovered,pages_read)"
+                " VALUES (7,1000,4600,3600,1,61,0,60)");
+    stats_book(t.stats, 7, &secs, &ppm);
+    assert(secs == 3600);
+    assert(ppm > 0.99 && ppm < 1.01);
+
+    /* An estimate counts in the total, never in the pace: it is wall clock
+     * reconstructed after the fact and carries no pages. */
+    ex(t.stats, "INSERT INTO sessions (book_id,start_time,end_time,"
+                " active_seconds,pages_start,pages_end,recovered,pages_read)"
+                " VALUES (7,5000,8600,3600,NULL,NULL,1,0)");
+    stats_book(t.stats, 7, &secs, &ppm);
+    assert(secs == 7200);
+    assert(ppm > 0.99 && ppm < 1.01);
+
+    /* The filter that keeps estimates out of the pace has to hold even when a
+     * recovered row carries pages, which it never should: the migration that
+     * seeded pages_read skips them and tracker_recover() writes none. The
+     * point of the filter is that a row like this one — a future bug, or a
+     * database edited by hand — cannot bend the pace. */
+    ex(t.stats, "INSERT INTO sessions (book_id,start_time,end_time,"
+                " active_seconds,pages_start,pages_end,recovered,pages_read)"
+                " VALUES (7,9000,12600,3600,1,500,1,499)");
+    stats_book(t.stats, 7, &secs, &ppm);
+    assert(secs == 10800);            /* it counts toward the total */
+    assert(ppm > 0.99 && ppm < 1.01); /* and not toward the pace */
+    ex(t.stats, "DELETE FROM sessions WHERE start_time=9000");
+
+    /* Another book's reading is not this book's. */
+    ex(t.stats, "INSERT INTO sessions (book_id,start_time,end_time,"
+                " active_seconds,pages_start,pages_end,recovered,pages_read)"
+                " VALUES (8,1000,4600,3600,1,300,0,299)");
+    stats_book(t.stats, 7, &secs, &ppm);
+    assert(secs == 7200);
+    assert(ppm > 0.99 && ppm < 1.01);
+
+    /* And nothing before tracking started is history at all. */
+    set_since(t.stats, "6000");
+    stats_book(t.stats, 7, &secs, &ppm);
+    assert(secs == 3600); /* only the estimate, which ends at 8600 */
+    assert(ppm == 0);     /* and it has no pages to make a pace from */
+
+    tracker_close(&t);
+    unlink(db_path);
+}
+
+/* Where the app reads and writes. Every one of these is fixed on the device and
+ * overridable by environment variable, which is what lets the tests point the
+ * code at a temporary file — including the two the liveness check uses, whose
+ * override is the only reason test_daemon_alive() can exist. */
+static void test_paths(void)
+{
+    assert(strcmp(stats_db_path(), STATS_DB) == 0);
+    assert(strcmp(explorer_db_path(), EXPLORER_DB) == 0);
+    assert(strcmp(pidfile_path(), PIDFILE) == 0);
+    assert(strcmp(proc_dir_path(), "/proc") == 0);
+
+    setenv("POCKETBOOK_STATISTICS_DB", "/tmp/x.db", 1);
+    setenv("POCKETBOOK_STATISTICS_EXPLORER_DB", "/tmp/y.db", 1);
+    setenv("POCKETBOOK_STATISTICS_PIDFILE", "/tmp/z.pid", 1);
+    setenv("POCKETBOOK_STATISTICS_PROC", "/tmp/proc", 1);
+    assert(strcmp(stats_db_path(), "/tmp/x.db") == 0);
+    assert(strcmp(explorer_db_path(), "/tmp/y.db") == 0);
+    assert(strcmp(pidfile_path(), "/tmp/z.pid") == 0);
+    assert(strcmp(proc_dir_path(), "/tmp/proc") == 0);
+
+    unsetenv("POCKETBOOK_STATISTICS_DB");
+    unsetenv("POCKETBOOK_STATISTICS_EXPLORER_DB");
+    unsetenv("POCKETBOOK_STATISTICS_PIDFILE");
+    unsetenv("POCKETBOOK_STATISTICS_PROC");
+    assert(strcmp(stats_db_path(), STATS_DB) == 0);
+    assert(strcmp(pidfile_path(), PIDFILE) == 0);
+}
+
+/* --- The daemon ------------------------------------------------------------
+ *
+ * Only two things about it have a host build: whether it thinks one of its own
+ * is already running, and the marks it leaves behind for the next start. Both
+ * are worth it. The first decides whether the day is measured at all, and it
+ * was wrong on a real device for months; the second is the only evidence there
+ * will ever be about a daemon that is killed without a chance to say so. */
+
+#define TEST_PIDFILE "/tmp/bs_test_daemon.pid"
+#define TEST_PROC "/tmp/bs_test_proc"
+
+static void write_pidfile_text(const char *text)
+{
+    FILE *f = fopen(TEST_PIDFILE, "w");
+    assert(f != NULL);
+    fputs(text, f);
+    fclose(f);
+}
+
+/* /proc/<pid>/cmdline as the kernel writes it: arguments separated by NULs,
+ * which is the part the check has to get right. */
+static void write_cmdline(int pid, const char *args, size_t len)
+{
+    char dir[128], path[160];
+    snprintf(dir, sizeof(dir), "%s/%d", TEST_PROC, pid);
+    mkdir(TEST_PROC, 0755);
+    mkdir(dir, 0755);
+    snprintf(path, sizeof(path), "%s/cmdline", dir);
+    FILE *f = fopen(path, "wb");
+    assert(f != NULL);
+    assert(fwrite(args, 1, len, f) == len);
+    fclose(f);
+}
+
+static void remove_cmdline(int pid)
+{
+    char path[160], dir[128];
+    snprintf(path, sizeof(path), "%s/%d/cmdline", TEST_PROC, pid);
+    snprintf(dir, sizeof(dir), "%s/%d", TEST_PROC, pid);
+    unlink(path);
+    rmdir(dir);
+}
+
+static void test_daemon_alive(void)
+{
+    setenv("POCKETBOOK_STATISTICS_PIDFILE", TEST_PIDFILE, 1);
+    setenv("POCKETBOOK_STATISTICS_PROC", TEST_PROC, 1);
+    const int self = (int)getpid();
+    char pid_text[32];
+    snprintf(pid_text, sizeof(pid_text), "%d\n", self);
+
+    /* No pidfile: nothing has ever started one. */
+    unlink(TEST_PIDFILE);
+    assert(daemon_alive() == 0);
+
+    /* A live pid whose process is one of ours. This process stands in for the
+     * daemon, so the pid is genuinely alive and kill(pid, 0) succeeds. */
+    write_pidfile_text(pid_text);
+    static const char ours[] =
+        "/mnt/ext1/applications/PocketBookStatistics.app\0--daemon\0";
+    write_cmdline(self, ours, sizeof(ours) - 1);
+    assert(daemon_alive() == 1);
+
+    /* The same live pid, but the process is the firmware's reader. This is the
+     * case that cost a real device its measurements: the pidfile survived a
+     * reboot and the number had been handed to somebody else. */
+    static const char reader[] = "/ebrmain/bin/eink-reader.app\0/mnt/ext1/b.epub\0";
+    write_cmdline(self, reader, sizeof(reader) - 1);
+    assert(daemon_alive() == 0);
+
+    /* Our own app, but not the daemon: the flag is what tells them apart. */
+    static const char app[] = "/mnt/ext1/applications/PocketBookStatistics.app\0";
+    write_cmdline(self, app, sizeof(app) - 1);
+    assert(daemon_alive() == 0);
+
+    /* An empty cmdline is a zombie, which polls nothing. */
+    write_cmdline(self, "", 0);
+    assert(daemon_alive() == 0);
+
+    /* A cmdline that cannot be read counts as gone. Not starting a daemon
+     * costs a day of measurement; a second one costs a poll loop and cannot
+     * double-count. */
+    remove_cmdline(self);
+    assert(daemon_alive() == 0);
+
+    /* A pid nothing owns, and a pidfile with nothing in it. */
+    write_cmdline(self, ours, sizeof(ours) - 1);
+    write_pidfile_text("2147483640\n");
+    assert(daemon_alive() == 0);
+    write_pidfile_text("not a pid\n");
+    assert(daemon_alive() == 0);
+    write_pidfile_text("");
+    assert(daemon_alive() == 0);
+
+    unlink(TEST_PIDFILE);
+    remove_cmdline(self);
+    rmdir(TEST_PROC);
+    unsetenv("POCKETBOOK_STATISTICS_PIDFILE");
+    unsetenv("POCKETBOOK_STATISTICS_PROC");
+}
+
+static void test_daemon_marks(void)
+{
+    const char *db_path = "/tmp/bs_test_marks.db";
+    unlink(db_path);
+    tracker t;
+    assert(tracker_init(&t, db_path, EXP_DB) == 0);
+
+    /* A first start on a fresh database: the marks appear, and there is no
+     * previous run to report. */
+    assert(stats_meta_int(t.stats, META_DAEMON_STARTED) == 0);
+    daemon_note_start(t.stats);
+    const int64_t first = stats_meta_int(t.stats, META_DAEMON_STARTED);
+    assert(first > 0);
+    assert(stats_meta_int(t.stats, META_DAEMON_LAST_POLL) == first);
+    assert(stats_meta_int(t.stats, META_DAEMON_POLLS) == 0);
+
+    /* A run that polled for a while and was then killed. What the heartbeat
+     * left behind is what the next start reads. */
+    stats_meta_set_int(t.stats, META_DAEMON_POLLS, 40);
+    stats_meta_set_int(t.stats, META_DAEMON_LAST_POLL, first + 600);
+    daemon_note_start(t.stats);
+    assert(stats_meta_int(t.stats, META_DAEMON_POLLS) == 0);
+    const int64_t second = stats_meta_int(t.stats, META_DAEMON_STARTED);
+    assert(second >= first);
+    assert(stats_meta_int(t.stats, META_DAEMON_LAST_POLL) == second);
 
     tracker_close(&t);
     unlink(db_path);
@@ -280,6 +851,7 @@ int main(void)
     /* Fixed zone: the day-boundary logic is local-time based. */
     setenv("TZ", "Europe/Berlin", 1);
     tzset();
+    avoid_midnight();
 
     sqlite3 *exp = make_explorer();
     unlink(ST_DB);
@@ -737,6 +1309,15 @@ int main(void)
     assert(q1(jumper.stats, "SELECT pages_read FROM sessions") == 0);
     tracker_close(&jumper);
 
+    test_reopen_after_poweroff(exp);
+    test_reopen_across_midnight(exp);
+    test_year_days();
+    test_stats_book();
+    test_legacy_schema();
+    test_log_rotation();
+    test_paths();
+    test_daemon_alive();
+    test_daemon_marks();
     test_streak();
     test_manual_totals();
     test_version_compare();

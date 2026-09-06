@@ -658,6 +658,48 @@ int tracker_recover(tracker *t)
     return n;
 }
 
+/* Adds a measured window to a row that is already there, and splits it at
+ * local midnight on the way in. All day-level stats group by date(end_time), so
+ * a single row holding 23:30 to 00:03 puts all 33 of its minutes on the new day
+ * and leaves the previous one empty; insert_session_split() is the same rule
+ * for a session written whole. The counted window is [end_ts - active, end_ts].
+ *
+ * `row_end` is what the row says its end is, which decides whether a midnight
+ * lies inside the window at all. Returns the start_time of the row the session
+ * continues in: the one passed in, or the row opened at midnight.
+ *
+ * A window worth no seconds still opens the new day's row, because the session
+ * itself continues there. */
+static int64_t credit_window(tracker *t, const pb_state *s, int64_t row_start,
+                             int64_t row_end, int64_t end_ts, int64_t active,
+                             int pages)
+{
+    const int64_t midnight = local_day_start(end_ts);
+    if (row_end < midnight) {
+        int64_t before = midnight - (end_ts - active);
+        if (before < 0)
+            before = 0;
+        if (before > active)
+            before = active;
+        const int pages_before =
+            active > 0 ? (int)((int64_t)pages * before / active) : 0;
+        if (before > 0)
+            update_session(t, s->bookid, row_start, midnight - 1, before,
+                           pages_before, s->cpage);
+        /* The new row is opened empty and ending at midnight: the update below
+         * is what credits it, and it only credits a row whose end it actually
+         * moves forward. */
+        pb_state split = *s;
+        split.position_ts = midnight;
+        insert_session(t, &split, midnight, 0, 0, 0, 0);
+        row_start = midnight;
+        active -= before;
+        pages -= pages_before;
+    }
+    update_session(t, s->bookid, row_start, end_ts, active, pages, s->cpage);
+    return row_start;
+}
+
 /* The one rule the tracker measures by: a span of wall clock is worth reading
  * only as far as the pages turned across it make plausible. A flat cap cannot
  * tell twenty unwatched minutes of reading from a single page turned after an
@@ -730,6 +772,68 @@ static int resume_session(tracker *t, const pb_state *s)
     return found;
 }
 
+/* A position stamped before the open belongs to the session that was still
+ * running when it was written. The reader is switched off inside a book: the
+ * firmware saves the position on the way down, and on the way up it stamps a
+ * fresh opentime while leaving that position where it is. The clamp in
+ * tracker_observe() then hides the stretch from the gap logic, and the whole of
+ * it is dropped — measured on a real device as 15 minutes and 10 turned pages
+ * arriving as a day with no reading at all, because the new session's own
+ * window is zero seconds wide and the ten pages inside it read as a jump.
+ *
+ * So credit it here, to the row that was open at the time, under the same rule
+ * as any other window: bounded by the pages turned across it, refused outright
+ * if those pages look like navigation. update_session() only ever moves a row's
+ * end forward, so a stretch another tracker has already paid for adds nothing.
+ */
+static void close_previous_session(tracker *t, const pb_state *s)
+{
+    sqlite3_stmt *st = NULL;
+    const char *sql =
+        "SELECT start_time, end_time, pages_end FROM sessions"
+        " WHERE book_id=?1 AND recovered=0 AND start_time<?2"
+        " ORDER BY start_time DESC LIMIT 1";
+    if (sqlite3_prepare_v2(t->stats, sql, -1, &st, NULL) != SQLITE_OK)
+        return;
+    sqlite3_bind_int64(st, 1, s->bookid);
+    sqlite3_bind_int64(st, 2, s->opentime);
+
+    int64_t row_start = 0, row_end = 0;
+    int pages_end = -1;
+    int found = 0;
+    if (sqlite3_step(st) == SQLITE_ROW) {
+        row_start = sqlite3_column_int64(st, 0);
+        row_end = sqlite3_column_int64(st, 1);
+        if (sqlite3_column_type(st, 2) != SQLITE_NULL)
+            pages_end = sqlite3_column_int(st, 2);
+        found = 1;
+    }
+    sqlite3_finalize(st);
+    if (!found || row_end >= s->position_ts)
+        return; /* nothing to close, or someone has already closed it */
+
+    const int64_t span = s->position_ts - row_end;
+    /* -1 is "no page evidence", which credited() answers with the flat cap.
+     * A real move backwards is a different thing and buys nothing at all, the
+     * way it does in the gap path: the reader went to a bookmark, and what is
+     * read from there is credited by the observations that follow. */
+    const int has_pages = pages_end >= 0;
+    const int delta = has_pages ? s->cpage - pages_end : -1;
+    int64_t active = has_pages && delta < 0 ? 0 : credited(span, delta);
+    /* Silently: the state that brought us here lasts until the firmware saves
+     * a position again, and StatsBridge::catchUp() builds a fresh tracker on
+     * every refresh, so a line here would repeat for as long as it holds. What
+     * is worth a log line is the credit, which happens once. */
+    if (page_jump(span, delta))
+        active = 0;
+    if (active <= 0)
+        return;
+    const int pages = delta > 0 ? delta : 0;
+    credit_window(t, s, row_start, row_end, s->position_ts, active, pages);
+    pb_log("close: %d s and %d pages credited to the session before the reopen",
+           (int)active, pages);
+}
+
 int tracker_observe(tracker *t, const pb_state *s)
 {
     /* Before the early return: the marks have to stay one poll apart, and a
@@ -753,8 +857,20 @@ int tracker_observe(tracker *t, const pb_state *s)
      *     Two of those in one afternoon added 20 minutes to a day with 15
      *     minutes of actual reading. */
     pb_state open = *s;
-    if (open.position_ts < open.opentime)
+    if (open.position_ts < open.opentime) {
+        /* Before the clamp takes the evidence away: that older position is the
+         * previous session's last save, and the reading up to it is still
+         * unpaid.
+         *
+         * Only when this tracker has not seen the session yet. A reopened book
+         * keeps its stale position_ts until the firmware saves again, which is
+         * up to 75 minutes of polls, and asking the database on every one of
+         * them buys nothing: the transition is what carries the unpaid
+         * stretch. */
+        if (t->cur_open != s->opentime)
+            close_previous_session(t, s);
         open.position_ts = open.opentime;
+    }
 
     /* What has already been paid for is what the row says, not what this
      * process remembers — and it is re-read on every observation, not only
@@ -842,34 +958,8 @@ int tracker_observe(tracker *t, const pb_state *s)
          * pace with no minutes to divide them by. */
         int pages = gap > 0 ? delta_fwd : 0;
 
-        /* All day stats group by date(end_time), so a session must not carry
-         * time across a local midnight: split the row there. The counted window
-         * is [position_ts - gap, position_ts]. */
-        int64_t midnight = local_day_start(s->position_ts);
-        if (t->cur_pos_ts < midnight) {
-            int64_t before = midnight - (s->position_ts - gap);
-            if (before < 0)
-                before = 0;
-            if (before > gap)
-                before = gap;
-            const int pages_before =
-                gap > 0 ? (int)((int64_t)pages * before / gap) : 0;
-            if (before > 0)
-                update_session(t, s->bookid, t->cur_row_start, midnight - 1,
-                               before, pages_before, s->cpage);
-            /* The new row is opened empty and ending at midnight: the
-             * update below is what credits it, and it only credits a row whose
-             * end it actually moves forward. */
-            pb_state split = *s;
-            split.position_ts = midnight;
-            insert_session(t, &split, midnight, 0, 0, 0, 0);
-            t->cur_row_start = midnight;
-            gap -= before;
-            pages -= pages_before;
-        }
-
-        update_session(t, s->bookid, t->cur_row_start, s->position_ts, gap,
-                       pages, s->cpage);
+        t->cur_row_start = credit_window(t, s, t->cur_row_start, t->cur_pos_ts,
+                                         s->position_ts, gap, pages);
         upsert_book(t, s);
         t->cur_pos_ts = s->position_ts;
         t->cur_pages = s->cpage;

@@ -2,11 +2,17 @@
 
 #include <stdarg.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
 
-#define LOG_PATH PB_LOG_PATH
+const char *pb_log_path(void)
+{
+    const char *p = getenv("POCKETBOOK_STATISTICS_LOG");
+    return p ? p : PB_LOG_PATH;
+}
 /* Big enough for a week of ordinary use, small enough to read on the device. */
 #define LOG_MAX_BYTES (64 * 1024)
 #define LOG_KEEP_BYTES (32 * 1024)
@@ -14,13 +20,13 @@
 /* Halve the file rather than delete it: the oldest lines are the ones worth
  * losing, and a log that empties itself has nothing to say about the week it
  * was kept for. */
-static void rotate_if_needed(void)
+static void rotate_if_needed(const char *path)
 {
     struct stat st;
-    if (stat(LOG_PATH, &st) != 0 || st.st_size <= LOG_MAX_BYTES)
+    if (stat(path, &st) != 0 || st.st_size <= LOG_MAX_BYTES)
         return;
 
-    FILE *in = fopen(LOG_PATH, "r");
+    FILE *in = fopen(path, "r");
     if (!in)
         return;
     if (fseek(in, st.st_size - LOG_KEEP_BYTES, SEEK_SET) != 0) {
@@ -38,8 +44,8 @@ static void rotate_if_needed(void)
      * and if they rotate at the same moment one must not truncate the other's
      * half-written copy. Losing a few lines to the race is fine; a corrupt log
      * is not. */
-    char tmp[sizeof(LOG_PATH) + 32];
-    snprintf(tmp, sizeof(tmp), LOG_PATH ".%d", (int)getpid());
+    char tmp[512];
+    snprintf(tmp, sizeof(tmp), "%s.%d", path, (int)getpid());
     FILE *out = fopen(tmp, "w");
     if (!out) {
         fclose(in);
@@ -58,15 +64,16 @@ static void rotate_if_needed(void)
         unlink(tmp);
         return;
     }
-    rename(tmp, LOG_PATH);
+    rename(tmp, path);
 }
 
 void pb_log(const char *fmt, ...)
 {
+    const char *path = pb_log_path();
     mkdir(STATS_DIR, 0755);
-    rotate_if_needed();
+    rotate_if_needed(path);
 
-    FILE *f = fopen(LOG_PATH, "a");
+    FILE *f = fopen(path, "a");
     if (!f)
         return;
 

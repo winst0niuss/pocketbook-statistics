@@ -17,11 +17,14 @@ sdk:
 	  git -C sdk sparse-checkout set \
 	    SDK-B288/usr/arm-obreey-linux-gnueabi/sysroot/usr/local
 
-# ---- Host tests: tracker session logic (no device needed) ----
+# ---- Host tests: tracker, aggregates, daemon liveness (no device needed) ----
+# daemon.c is in here for the liveness check: a pidfile whose number belongs to
+# some other process is how the daemon silently stops being started, and that
+# is worth a test rather than a device.
 test:
 	mkdir -p build
 	cc $(CFLAGS) -o build/test_tracker test/test_tracker.c \
-	  src/tracker.c src/stats_db.c src/version.c src/log.c -lsqlite3
+	  src/tracker.c src/stats_db.c src/version.c src/log.c src/daemon.c -lsqlite3
 	./build/test_tracker
 	@python3 tools/check_qml.py
 
