@@ -3,6 +3,7 @@
 import QtQuick
 import QtTest
 import "qrc:/" as App
+import "layout.js" as Layout
 
 TestCase {
     id: testCase
@@ -64,5 +65,12 @@ TestCase {
     function test_two_cards_and_a_gap_fit_the_screen_exactly() {
         var tab = createTemporaryObject(streak, testCase);
         compare(2 * tab.cardWidth + tab.gap + 2 * tab.sideMargin, tab.width);
+    }
+
+    /* The screen does not scroll, so anything past its edge is simply lost. */
+    function test_nothing_sticks_out_past_the_screen() {
+        var tab = createTemporaryObject(streak, testCase);
+        var bad = Layout.offenders(tab);
+        compare(bad.join("; "), "");
     }
 }

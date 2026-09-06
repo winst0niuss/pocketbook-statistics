@@ -4,6 +4,7 @@
 import QtQuick
 import QtTest
 import "qrc:/" as App
+import "layout.js" as Layout
 
 TestCase {
     id: testCase
@@ -87,5 +88,12 @@ TestCase {
         stats.setBooksFinished(-1);
         tab.refresh();
         compare(tab.ov.booksFinished, 0);
+    }
+
+    /* The screen does not scroll, so anything past its edge is simply lost. */
+    function test_nothing_sticks_out_past_the_screen() {
+        var tab = createTemporaryObject(overview, testCase);
+        var bad = Layout.offenders(tab);
+        compare(bad.join("; "), "");
     }
 }

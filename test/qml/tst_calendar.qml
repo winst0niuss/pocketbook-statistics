@@ -2,6 +2,7 @@
 import QtQuick
 import QtTest
 import "qrc:/" as App
+import "layout.js" as Layout
 
 TestCase {
     id: testCase
@@ -67,5 +68,12 @@ TestCase {
         tab.refresh();
         compare(tab.m.ndays, 29);
         compare(tab.m.days.length, 29);
+    }
+
+    /* The screen does not scroll, so anything past its edge is simply lost. */
+    function test_nothing_sticks_out_past_the_screen() {
+        var tab = createTemporaryObject(calendar, testCase);
+        var bad = Layout.offenders(tab);
+        compare(bad.join("; "), "");
     }
 }
