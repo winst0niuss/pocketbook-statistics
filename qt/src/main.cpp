@@ -78,6 +78,10 @@ int main(int argc, char *argv[])
     Shim shim;
     /* An app update ships a new shim; nothing else would ever install it. */
     shim.refresh();
+    /* And on a device that has never had one, put it in: nothing of ours starts
+     * at boot, so without it the day is measured only while the app happens to
+     * be open. */
+    shim.enableByDefault();
     spawn_daemon(QGuiApplication::applicationFilePath().toUtf8().constData());
 
     QQmlApplicationEngine engine;
