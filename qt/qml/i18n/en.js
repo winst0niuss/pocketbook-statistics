@@ -55,7 +55,7 @@ var strings = {
 
     "about.autostart": "AUTOSTART",
     "about.shim": "Start statistics when a book opens",
-    "about.shimHint": "Opening an EPUB, FB2 or PDF starts tracking.",
+    "about.shimHint": "Opening a book starts tracking.",
     "about.log": "Last attempt:",
 
     "update.errNoNetwork": "No connection. Turn on Wi-Fi and try again.",

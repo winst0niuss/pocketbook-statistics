@@ -15,6 +15,7 @@ APP='/mnt/ext1/applications/PocketBookStatistics.app'
 PIDFILE='/mnt/ext1/system/pocketbook-statistics/statistics.pid'
 LOG='/mnt/ext1/system/pocketbook-statistics/open.log'
 SYS_EXT='/ebrmain/config/extensions.cfg'
+USER_EXT='/mnt/ext1/system/config/extensions.cfg'
 START_DELAY=45
 
 log() {
@@ -57,15 +58,22 @@ else
     log "daemon: $APP missing"
 fi
 
-# Which reader would have opened this? The firmware's own table lists the
-# applications per extension, and we put ourselves at the front of that list on
-# install — so the answer is the next name along.
+# Which reader would have opened this? The tables list the applications per
+# extension, and we put ourselves at the front of that list on install — so the
+# answer is the next name along.
+#
+# The user's table first, because that is the one install() edited: it holds the
+# apps that were there before us, and for a format only it names (a hand-made
+# entry, or one we fabricated) the firmware's own table has nothing to say. If
+# it yields no usable app — our own entry and nothing else — the firmware's
+# table is asked next.
 book="$1"
 ext=$(printf '%s' "${book##*.}" | tr 'A-Z' 'a-z')
 reader=''
 
-line=$(grep -i "^${ext}:" "$SYS_EXT" 2>/dev/null | head -n 1)
-if [ -n "$line" ]; then
+for table in "$USER_EXT" "$SYS_EXT"; do
+    line=$(grep -i "^${ext}:" "$table" 2>/dev/null | head -n 1)
+    [ -z "$line" ] && continue
     for app in $(printf '%s' "$line" | cut -d: -f4 | tr ',' ' '); do
         [ "$app" = "$SELF" ] && continue
         for dir in /ebrmain/bin /mnt/ext1/system/bin; do
@@ -76,7 +84,8 @@ if [ -n "$line" ]; then
         done
         [ -n "$reader" ] && break
     done
-fi
+    [ -n "$reader" ] && break
+done
 
 # Nothing usable in the table (or no table): fall back to the readers a PB629
 # ships, in the order its handlers.cfg names them.

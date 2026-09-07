@@ -60,7 +60,7 @@ var strings = {
 
     "about.autostart": "АВТОЗАПУСК",
     "about.shim": "Запуск статистики при открытии книги",
-    "about.shimHint": "Открытие EPUB, FB2 или PDF запускает учёт статистики.",
+    "about.shimHint": "Открытие книг запускает учёт статистики.",
     "about.log": "Последняя попытка:",
 
     "update.errNoNetwork": "Нет соединения. Включите Wi-Fi и повторите.",
