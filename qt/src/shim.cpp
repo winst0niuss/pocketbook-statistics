@@ -20,13 +20,36 @@ constexpr const char *kUserExtBackup =
  * owns a format — never written. */
 constexpr const char *kSysExt = "/ebrmain/config/extensions.cfg";
 
-/* Formats worth intercepting: the ones a reader actually reads. Leaving the
- * rest alone keeps the blast radius small — every entry here is a format that
- * stops opening if the shim is broken. */
-const QStringList &formats()
+/* The three a reader is for. These are intercepted whether or not the device's
+ * table names them: install() fabricates an entry where there is none, and the
+ * shim falls back to the readers a PocketBook ships. */
+const QStringList &baseFormats()
 {
     static const QStringList f{QStringLiteral("epub"), QStringLiteral("fb2"),
                                QStringLiteral("pdf")};
+    return f;
+}
+
+/* Every other extension PocketBook's own readers open, across models. The list
+ * is deliberately generous, because formats() keeps only the ones this device's
+ * table actually names — an extension no firmware here knows about costs
+ * nothing, and one the table routes somewhere that is not a reader (music,
+ * images, fonts, firmware images) is not in the list at all. That is what keeps
+ * the blast radius bounded: every format intercepted is one that stops opening
+ * if the shim is broken. `acsm` is left out on purpose — it is a fulfilment
+ * token, not a book; what it downloads is an epub or a pdf, and those are
+ * already here. */
+const QStringList &otherFormats()
+{
+    static const QStringList f{
+        QStringLiteral("fb3"),  QStringLiteral("fbz"),  QStringLiteral("zip"),
+        QStringLiteral("djvu"), QStringLiteral("djv"),  QStringLiteral("txt"),
+        QStringLiteral("rtf"),  QStringLiteral("doc"),  QStringLiteral("docx"),
+        QStringLiteral("html"), QStringLiteral("htm"),  QStringLiteral("chm"),
+        QStringLiteral("mobi"), QStringLiteral("prc"),  QStringLiteral("azw"),
+        QStringLiteral("azw3"), QStringLiteral("pdb"),  QStringLiteral("tcr"),
+        QStringLiteral("oeb"),  QStringLiteral("cbz"),  QStringLiteral("cbr"),
+        QStringLiteral("cbt")};
     return f;
 }
 
@@ -51,6 +74,24 @@ QString entryFor(const QStringList &lines, const QString &ext)
             return line;
     }
     return QString();
+}
+
+/* Every format this device can open: the base three, plus each of the others
+ * the firmware's table — or the user's — already routes somewhere. Fabricating
+ * an entry for a format nothing here handles would put our script in front of
+ * an empty list, and the shim would then have to guess which reader the
+ * firmware meant; skipping it leaves that file exactly as it was. */
+QStringList formats()
+{
+    QStringList out = baseFormats();
+    const QStringList userLines = readLines(kUserExt);
+    const QStringList sysLines = readLines(kSysExt);
+    for (const QString &ext : otherFormats()) {
+        if (!entryFor(userLines, ext).isEmpty()
+            || !entryFor(sysLines, ext).isEmpty())
+            out.append(ext);
+    }
+    return out;
 }
 
 /* Our name, then whatever was there before. Anything already listed stays, so
