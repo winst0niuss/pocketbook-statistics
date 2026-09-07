@@ -44,13 +44,14 @@ private slots:
     void init()
     {
         device_ = new Device;
-        /* What the firmware ships, and what the user partition usually holds:
-         * one entry for one of the three formats. */
+        /* What the firmware ships — four reading formats and one that is not
+         * — and what the user partition usually holds: a single entry. */
         device_->write(kSysExt,
                        "epub:@EPUB_file:1:reader.app:ICON_EPUB\n"
                        "fb2:@FB2_file:1:reader.app:ICON_FB2\n"
                        "pdf:@PDF_file:1:pdfviewer.app,reader.app:ICON_PDF\n"
-                       "djvu:@DJVU_file:1:pdfviewer.app:ICON_DJVU\n");
+                       "djvu:@DJVU_file:1:pdfviewer.app:ICON_DJVU\n"
+                       "mp3:@Music_file:1:pbaudio.app:ICON_MUSIC\n");
         device_->write(kUserExt, "epub:@EPUB_file:1:reader.app:ICON_EPUB\n");
         shim_ = new Shim;
     }
@@ -101,9 +102,17 @@ void TestShim::installsForEveryReadingFormat()
          * nothing starts the daemon. */
         QCOMPARE(apps.first(), QStringLiteral("pbstatistics-open.app"));
     }
-    /* Formats we do not read stay untouched — every entry here is a format
-     * that stops opening if the shim is broken. */
-    QVERIFY(entryFor(cfg, QStringLiteral("djvu")).isEmpty());
+    /* Not only the three: every reading format the device's table names is
+     * intercepted too, or a day spent in a djvu goes unmeasured. */
+    QCOMPARE(appsFor(cfg, QStringLiteral("djvu")).value(0),
+             QStringLiteral("pbstatistics-open.app"));
+    /* What is not reading stays untouched — every entry here is a format that
+     * stops opening if the shim is broken, and the music player is no business
+     * of ours. So does a reading format no table names: fabricating an entry
+     * would put our script in front of an empty list, with nothing to hand the
+     * file on to. */
+    QVERIFY(entryFor(cfg, QStringLiteral("mp3")).isEmpty());
+    QVERIFY(entryFor(cfg, QStringLiteral("chm")).isEmpty());
     /* Backed up before the first write. */
     QCOMPARE(device_->read(kBackup),
              QByteArrayLiteral("epub:@EPUB_file:1:reader.app:ICON_EPUB\n"));
