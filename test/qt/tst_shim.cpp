@@ -17,6 +17,8 @@ const QString kUserExt = QStringLiteral("/mnt/ext1/system/config/extensions.cfg"
 const QString kBackup =
     QStringLiteral("/mnt/ext1/system/config/extensions.cfg.pbstatistics-backup");
 const QString kSysExt = QStringLiteral("/ebrmain/config/extensions.cfg");
+const QString kMarker =
+    QStringLiteral("/mnt/ext1/system/pocketbook-statistics/shim-default");
 
 /* Entries look like  epub:@EPUB_file:1:reader.app,other.app:ICON_EPUB */
 QString entryFor(const QByteArray &cfg, const QString &ext)
@@ -44,13 +46,14 @@ private slots:
     void init()
     {
         device_ = new Device;
-        /* What the firmware ships, and what the user partition usually holds:
-         * one entry for one of the three formats. */
+        /* What the firmware ships — four reading formats and one that is not
+         * — and what the user partition usually holds: a single entry. */
         device_->write(kSysExt,
                        "epub:@EPUB_file:1:reader.app:ICON_EPUB\n"
                        "fb2:@FB2_file:1:reader.app:ICON_FB2\n"
                        "pdf:@PDF_file:1:pdfviewer.app,reader.app:ICON_PDF\n"
-                       "djvu:@DJVU_file:1:pdfviewer.app:ICON_DJVU\n");
+                       "djvu:@DJVU_file:1:pdfviewer.app:ICON_DJVU\n"
+                       "mp3:@Music_file:1:pbaudio.app:ICON_MUSIC\n");
         device_->write(kUserExt, "epub:@EPUB_file:1:reader.app:ICON_EPUB\n");
         shim_ = new Shim;
     }
@@ -71,6 +74,9 @@ private slots:
     void refreshReplacesAStaleScript();
     void refreshLeavesAnUpToDateScriptAlone();
     void refreshDoesNothingWhenTheShimIsNotInstalled();
+    void refreshTopsUpAFormatTheOldBuildMissed();
+    void refreshLeavesASwitchedOffShimOff();
+    void enableByDefaultInstallsOnceAndOnlyOnce();
     void aFormatNobodyClaimsGetsAnEntryOfItsOwn();
     void aFailedWriteLeavesTheDeviceAsItWas();
 
@@ -101,9 +107,17 @@ void TestShim::installsForEveryReadingFormat()
          * nothing starts the daemon. */
         QCOMPARE(apps.first(), QStringLiteral("pbstatistics-open.app"));
     }
-    /* Formats we do not read stay untouched — every entry here is a format
-     * that stops opening if the shim is broken. */
-    QVERIFY(entryFor(cfg, QStringLiteral("djvu")).isEmpty());
+    /* Not only the three: every reading format the device's table names is
+     * intercepted too, or a day spent in a djvu goes unmeasured. */
+    QCOMPARE(appsFor(cfg, QStringLiteral("djvu")).value(0),
+             QStringLiteral("pbstatistics-open.app"));
+    /* What is not reading stays untouched — every entry here is a format that
+     * stops opening if the shim is broken, and the music player is no business
+     * of ours. So does a reading format no table names: fabricating an entry
+     * would put our script in front of an empty list, with nothing to hand the
+     * file on to. */
+    QVERIFY(entryFor(cfg, QStringLiteral("mp3")).isEmpty());
+    QVERIFY(entryFor(cfg, QStringLiteral("chm")).isEmpty());
     /* Backed up before the first write. */
     QCOMPARE(device_->read(kBackup),
              QByteArrayLiteral("epub:@EPUB_file:1:reader.app:ICON_EPUB\n"));
@@ -236,6 +250,65 @@ void TestShim::refreshDoesNothingWhenTheShimIsNotInstalled()
 
     QVERIFY(!QFile::exists(device_->at(kScript)));
     QCOMPARE(device_->read(kUserExt), before);
+}
+
+/* A build that reads more formats than the one which installed the shim. The
+ * entries it never wrote are the difference between a book that starts the
+ * daemon and one that does not — and installed(), which is all-or-nothing,
+ * would put the About switch at "off" for a change the user never made. */
+void TestShim::refreshTopsUpAFormatTheOldBuildMissed()
+{
+    QVERIFY(shim_->install());
+    QByteArray cfg = device_->read(kUserExt);
+    cfg.replace("djvu:@DJVU_file:1:pbstatistics-open.app,",
+                "djvu:@DJVU_file:1:");
+    device_->write(kUserExt, cfg);
+    QVERIFY(!shim_->installed());
+
+    shim_->refresh();
+
+    QVERIFY(shim_->installed());
+    QCOMPARE(appsFor(device_->read(kUserExt), QStringLiteral("djvu")),
+             QStringList({QStringLiteral("pbstatistics-open.app"),
+                          QStringLiteral("pdfviewer.app")}));
+}
+
+/* The other side of that: a shim the user has just switched off must stay off.
+ * remove() takes the script with it, so what is tested here is the half-removed
+ * device — the script still there, no entry naming us — where writing the
+ * entries back would overrule the one thing the user did ask for. */
+void TestShim::refreshLeavesASwitchedOffShimOff()
+{
+    QVERIFY(shim_->install());
+    QByteArray cfg = device_->read(kUserExt);
+    cfg.replace("pbstatistics-open.app,", "");
+    device_->write(kUserExt, cfg);
+
+    shim_->refresh();
+
+    QVERIFY2(!device_->read(kUserExt).contains("pbstatistics-open.app"),
+             device_->read(kUserExt).constData());
+}
+
+/* Nothing of ours starts at boot, so a device where the shim was never
+ * installed measures only what happens while the app is open — and someone who
+ * installs a reading tracker and sees an empty evening has no way of guessing
+ * there was a switch. It goes in on the first run, and the decision is taken
+ * once ever: turning it off again holds. */
+void TestShim::enableByDefaultInstallsOnceAndOnlyOnce()
+{
+    QVERIFY(!shim_->installed());
+
+    shim_->enableByDefault();
+
+    QVERIFY(shim_->installed());
+    QVERIFY(QFileInfo::exists(device_->at(kMarker)));
+
+    QVERIFY(shim_->remove());
+    shim_->enableByDefault();
+
+    QVERIFY(!shim_->installed());
+    QVERIFY(!QFile::exists(device_->at(kScript)));
 }
 
 /* A format neither the user partition nor the firmware names: the entry is

@@ -55,7 +55,7 @@ var strings = {
 
     "about.autostart": "AUTOSTART",
     "about.shim": "Statistik beim Öffnen eines Buchs starten",
-    "about.shimHint": "Ein EPUB, FB2 oder PDF zu öffnen startet die Erfassung.",
+    "about.shimHint": "Ein Buch zu öffnen startet die Erfassung.",
     "about.log": "Letzter Versuch:",
 
     "update.errNoNetwork": "Keine Verbindung. WLAN einschalten und erneut versuchen.",

@@ -8,6 +8,10 @@
 #include "device_paths.h"
 #include "update_log.h"
 
+extern "C" {
+#include "daemon.h"
+}
+
 namespace {
 
 constexpr const char *kScriptName = "pbstatistics-open.app";
@@ -19,14 +23,40 @@ constexpr const char *kUserExtBackup =
 /* The firmware's own table. Read-only, and read only to learn which reader
  * owns a format — never written. */
 constexpr const char *kSysExt = "/ebrmain/config/extensions.cfg";
+/* Written the first time the app decides about the shim on its own. Its
+ * presence, not its content, is the whole record. */
+constexpr const char *kDefaultMarker = STATS_DIR "/shim-default";
 
-/* Formats worth intercepting: the ones a reader actually reads. Leaving the
- * rest alone keeps the blast radius small — every entry here is a format that
- * stops opening if the shim is broken. */
-const QStringList &formats()
+/* The three a reader is for. These are intercepted whether or not the device's
+ * table names them: install() fabricates an entry where there is none, and the
+ * shim falls back to the readers a PocketBook ships. */
+const QStringList &baseFormats()
 {
     static const QStringList f{QStringLiteral("epub"), QStringLiteral("fb2"),
                                QStringLiteral("pdf")};
+    return f;
+}
+
+/* Every other extension PocketBook's own readers open, across models. The list
+ * is deliberately generous, because formats() keeps only the ones this device's
+ * table actually names — an extension no firmware here knows about costs
+ * nothing, and one the table routes somewhere that is not a reader (music,
+ * images, fonts, firmware images) is not in the list at all. That is what keeps
+ * the blast radius bounded: every format intercepted is one that stops opening
+ * if the shim is broken. `acsm` is left out on purpose — it is a fulfilment
+ * token, not a book; what it downloads is an epub or a pdf, and those are
+ * already here. */
+const QStringList &otherFormats()
+{
+    static const QStringList f{
+        QStringLiteral("fb3"),  QStringLiteral("fbz"),  QStringLiteral("zip"),
+        QStringLiteral("djvu"), QStringLiteral("djv"),  QStringLiteral("txt"),
+        QStringLiteral("rtf"),  QStringLiteral("doc"),  QStringLiteral("docx"),
+        QStringLiteral("html"), QStringLiteral("htm"),  QStringLiteral("chm"),
+        QStringLiteral("mobi"), QStringLiteral("prc"),  QStringLiteral("azw"),
+        QStringLiteral("azw3"), QStringLiteral("pdb"),  QStringLiteral("tcr"),
+        QStringLiteral("oeb"),  QStringLiteral("cbz"),  QStringLiteral("cbr"),
+        QStringLiteral("cbt")};
     return f;
 }
 
@@ -51,6 +81,24 @@ QString entryFor(const QStringList &lines, const QString &ext)
             return line;
     }
     return QString();
+}
+
+/* Every format this device can open: the base three, plus each of the others
+ * the firmware's table — or the user's — already routes somewhere. Fabricating
+ * an entry for a format nothing here handles would put our script in front of
+ * an empty list, and the shim would then have to guess which reader the
+ * firmware meant; skipping it leaves that file exactly as it was. */
+QStringList formats()
+{
+    QStringList out = baseFormats();
+    const QStringList userLines = readLines(kUserExt);
+    const QStringList sysLines = readLines(kSysExt);
+    for (const QString &ext : otherFormats()) {
+        if (!entryFor(userLines, ext).isEmpty()
+            || !entryFor(sysLines, ext).isEmpty())
+            out.append(ext);
+    }
+    return out;
 }
 
 /* Our name, then whatever was there before. Anything already listed stays, so
@@ -98,6 +146,50 @@ bool writeLines(const char *path, const QStringList &lines)
     return ok;
 }
 
+/* At least one entry names us, which is what "the shim is on" means whatever
+ * else may be missing. The top-up in refresh() needs this rather than
+ * installed(), which is all-or-nothing: a user who has just switched the shim
+ * off must not have the entries written back at the next start. */
+bool anyEntryNamesUs()
+{
+    for (const QString &line : readLines(kUserExt)) {
+        if (line.contains(QString::fromLatin1(kScriptName)))
+            return true;
+    }
+    return false;
+}
+
+/* The extensions.cfg half of an install: the backup, then our name at the front
+ * of the application list for every format this device can open. Idempotent —
+ * withShimFirst() takes us out before it puts us back — so it is safe to run
+ * over an install that already covers some of them. */
+bool writeEntries()
+{
+    if (!QFile::exists(devicePath(kUserExtBackup)))
+        QFile::copy(devicePath(kUserExt), devicePath(kUserExtBackup));
+
+    QStringList lines = readLines(kUserExt);
+    const QStringList sysLines = readLines(kSysExt);
+    for (const QString &ext : formats()) {
+        QString entry = entryFor(lines, ext);
+        const bool fromUser = !entry.isEmpty();
+        if (!fromUser)
+            entry = entryFor(sysLines, ext); /* empty is fine: fabricated below */
+        const QString patched = withShimFirst(entry, ext);
+        if (fromUser) {
+            for (QString &line : lines) {
+                if (line.startsWith(ext + QLatin1Char(':'), Qt::CaseInsensitive)) {
+                    line = patched;
+                    break;
+                }
+            }
+        } else {
+            lines.append(patched);
+        }
+    }
+    return writeLines(kUserExt, lines);
+}
+
 } // namespace
 
 Shim::Shim(QObject *parent) : QObject(parent) {}
@@ -118,14 +210,10 @@ bool Shim::installed() const
     return true;
 }
 
-void Shim::refresh()
+/* The script half of refresh(): replaces the installed copy when the app now
+ * ships a different one. */
+static void refreshScript()
 {
-    /* Deliberately not installed(): that also demands an entry for every
-     * format, and a device set up by hand — or by an older build — may name
-     * only one. The script on disk is ours whatever the entries say, and
-     * leaving a stale copy there is how a fix to it never reaches the reader. */
-    if (!QFileInfo::exists(devicePath(kScriptPath)))
-        return;
     QFile src(QStringLiteral(":/shim/open-book.sh"));
     QFile installedFile(devicePath(kScriptPath));
     if (!src.open(QIODevice::ReadOnly) || !installedFile.open(QIODevice::ReadOnly))
@@ -151,6 +239,51 @@ void Shim::refresh()
                               | QFile::ReadGroup | QFile::ExeGroup
                               | QFile::ReadOther | QFile::ExeOther);
     updateLog(QStringLiteral("shim: script refreshed"));
+}
+
+void Shim::refresh()
+{
+    /* Deliberately not installed(): that also demands an entry for every
+     * format, and a device set up by hand — or by an older build — may name
+     * only one. The script on disk is ours whatever the entries say, and
+     * leaving a stale copy there is how a fix to it never reaches the reader. */
+    if (!QFileInfo::exists(devicePath(kScriptPath)))
+        return;
+    refreshScript();
+    /* The entries are as much part of the shim as the script is. A build that
+     * reads more formats than the one which installed it would otherwise leave
+     * the new ones to open without a daemon behind them, and the About switch
+     * would read as off — asking the user to turn on again something they had
+     * already turned on, for a change they never made. */
+    if (anyEntryNamesUs() && !installed() && writeEntries())
+        updateLog(QStringLiteral("shim: entries brought up to date"));
+}
+
+/* Tracking has to work without being switched on. Sessions are derived from
+ * the firmware's own timestamps, but only while something of ours is running,
+ * and nothing of ours starts at boot: without the shim, a reader that has been
+ * switched off measures nothing at all until the app is next opened by hand. So
+ * the shim goes in on the first run rather than waiting to be found on the
+ * About screen — someone who installs a reading tracker and sees an empty day
+ * after an evening of reading has no way of guessing there was a switch.
+ *
+ * Once, ever, and the marker is written before the attempt: a failure is not
+ * retried at every launch, and a user who turns the shim back off is not
+ * overruled the next time the app starts. */
+void Shim::enableByDefault()
+{
+    const QString marker = devicePath(kDefaultMarker);
+    if (QFileInfo::exists(marker))
+        return;
+    QDir().mkpath(QFileInfo(marker).path());
+    QFile stamp(marker);
+    if (stamp.open(QIODevice::WriteOnly))
+        stamp.close();
+
+    if (installed())
+        return;
+    updateLog(QStringLiteral("shim: switching autostart on for the first run"));
+    install();
 }
 
 bool Shim::install()
@@ -184,30 +317,7 @@ bool Shim::install()
                               | QFile::ReadGroup | QFile::ExeGroup
                               | QFile::ReadOther | QFile::ExeOther);
 
-    if (!QFile::exists(devicePath(kUserExtBackup)))
-        QFile::copy(devicePath(kUserExt), devicePath(kUserExtBackup));
-
-    QStringList lines = readLines(kUserExt);
-    const QStringList sysLines = readLines(kSysExt);
-    for (const QString &ext : formats()) {
-        QString entry = entryFor(lines, ext);
-        const bool fromUser = !entry.isEmpty();
-        if (!fromUser)
-            entry = entryFor(sysLines, ext); /* empty is fine: fabricated below */
-        const QString patched = withShimFirst(entry, ext);
-        if (fromUser) {
-            for (QString &line : lines) {
-                if (line.startsWith(ext + QLatin1Char(':'), Qt::CaseInsensitive)) {
-                    line = patched;
-                    break;
-                }
-            }
-        } else {
-            lines.append(patched);
-        }
-    }
-
-    if (!writeLines(kUserExt, lines)) {
+    if (!writeEntries()) {
         QFile::remove(devicePath(kScriptPath));
         updateLog(QStringLiteral("shim: cannot write extensions.cfg, rolled back"));
         return false;
