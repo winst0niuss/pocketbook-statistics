@@ -1,6 +1,7 @@
 # Build output
 build/
 build-qt/
+build-host/
 
 # Fetched by `make sdk`
 /third_party/

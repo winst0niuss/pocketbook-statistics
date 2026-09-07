@@ -7,6 +7,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 
+#include "device_paths.h"
 #include "inkview_bridge.h"
 
 namespace {
@@ -103,7 +104,7 @@ void writeResourceIfChanged(const QString &resource, const QString &dest)
 // (missing/unparseable/read-only file) is ignored so the app still starts.
 void patchViewJson()
 {
-    const QString viewJsonPath = QLatin1String(kViewJson);
+    const QString viewJsonPath = devicePath(kViewJson);
     QFile f(viewJsonPath);
     if (!f.open(QIODevice::ReadOnly))
         return;
@@ -133,8 +134,8 @@ void patchViewJson()
         }
     } else {
         // Back up the original once, before the first modification.
-        if (!QFile::exists(QLatin1String(kBackup)))
-            QFile::copy(QLatin1String(kViewJson), QLatin1String(kBackup));
+        if (!QFile::exists(devicePath(kBackup)))
+            QFile::copy(devicePath(kViewJson), devicePath(kBackup));
 
         QJsonObject icon;
         icon[QStringLiteral("path")] = QLatin1String(kIconRel);
@@ -176,10 +177,10 @@ void patchViewJson()
 
 void ensureRegistered()
 {
-    QDir().mkpath(QLatin1String(kIconDir));
+    QDir().mkpath(devicePath(kIconDir));
     writeResourceIfChanged(QStringLiteral(":/pocketbook-statistics.bmp"),
-                           QLatin1String(kIconPath));
+                           devicePath(kIconPath));
     writeResourceIfChanged(QStringLiteral(":/pocketbook-statistics_f.bmp"),
-                           QLatin1String(kIconFocusedPath));
+                           devicePath(kIconFocusedPath));
     patchViewJson();
 }

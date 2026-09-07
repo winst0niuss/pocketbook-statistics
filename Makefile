@@ -27,6 +27,16 @@ test:
 	  src/tracker.c src/stats_db.c src/version.c src/log.c src/daemon.c -lsqlite3
 	./build/test_tracker
 	@python3 tools/check_qml.py
+	@$(MAKE) --no-print-directory i18ncheck
+
+# ---- Host tests for the Qt half: bridge, covers, installer, shim, updater ----
+# Needs cmake and a host Qt 6 (any 6.x — the device's own 6.8.2 is only for the
+# cross-build). Not part of `test`, because a checkout with neither still has
+# to be able to run the C tests. CI runs both.
+qt-test:
+	cmake -S test -B build-host
+	cmake --build build-host -j8
+	ctest --test-dir build-host --output-on-failure
 
 # ---- Build the app (single ELF, links the device's Qt at runtime) ----
 qt:
@@ -46,9 +56,17 @@ icons:
 	python3 tools/make_icon.py qt/qml
 
 clean:
-	rm -rf build build-qt
+	rm -rf build build-qt build-host
 
-.PHONY: sdk test qmlcheck qt deploy icons clean
+.PHONY: sdk test qmlcheck i18ncheck qt-test qt deploy icons clean
+
+# ---- Catalogs: the one part of the app nothing else compiles or runs ----
+# A missing key falls back to English on the device and says nothing; a renamed
+# placeholder renders as "{version}" mid-sentence. Known gaps live in
+# qt/qml/i18n/untranslated.json — `--update-baseline` rewrites it.
+i18ncheck:
+	@command -v node >/dev/null || { echo "i18n: node not found, skipping"; exit 0; }; \
+	  node tools/check_i18n.mjs
 
 # ---- QML sanity: things qmllint lets through but the engine refuses ----
 # A duplicated function or id stops the component being created, and the app

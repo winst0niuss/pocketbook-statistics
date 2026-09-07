@@ -12,6 +12,7 @@
 #include <QStringList>
 #include <QXmlStreamReader>
 
+#include "device_paths.h"
 #include "miniz.h"
 
 extern "C" {
@@ -20,7 +21,7 @@ extern "C" {
 
 namespace {
 
-constexpr const char *kCacheDir = OWN_COVER_DIR;
+QString cacheDir() { return devicePath(OWN_COVER_DIR); }
 /* A comic's first entries are sometimes a scan-group banner or an image Qt
  * cannot decode; try a few before giving up. */
 constexpr int kComicTries = 4;
@@ -367,7 +368,7 @@ QString bookCover(const QString &bookPath, const QString &cacheKey)
     if (cacheKey.isEmpty())
         return {};
     const QString cachePath =
-        QStringLiteral("%1/%2.png").arg(QLatin1String(kCacheDir), cacheKey);
+        QStringLiteral("%1/%2.png").arg(cacheDir(), cacheKey);
     if (QFile::exists(cachePath))
         return cachePath;
     if (bookPath.isEmpty() || !QFile::exists(bookPath))
@@ -387,7 +388,7 @@ QString bookCover(const QString &bookPath, const QString &cacheKey)
         failed.insert(bookPath);
         return {};
     }
-    QDir().mkpath(QLatin1String(kCacheDir));
+    QDir().mkpath(cacheDir());
     const QImage scaled = image.height() > 400
         ? image.scaledToHeight(400, Qt::SmoothTransformation)
         : image;

@@ -13,6 +13,7 @@
 
 #include <cstring>
 
+#include "device_paths.h"
 #include "inkview_bridge.h"
 #include "update_log.h"
 #include "miniz.h"
@@ -41,8 +42,7 @@ constexpr qint64 kMinBinarySize = 300 * 1024;
 
 QString updatePath(const char *name)
 {
-    return QString::fromLatin1(kUpdateDir) + QLatin1Char('/')
-           + QString::fromLatin1(name);
+    return devicePath(kUpdateDir) + QLatin1Char('/') + QString::fromLatin1(name);
 }
 
 bool looksLikeElf(const QString &path)
@@ -76,7 +76,7 @@ QString handoverScript(const QString &app, const QString &staged)
         "\"$APP\" &\n")
         .arg(app, staged)
         .arg(QCoreApplication::applicationPid())
-        .arg(QString::fromLatin1(PIDFILE));
+        .arg(devicePath(PIDFILE));
 }
 
 } // namespace
@@ -127,7 +127,7 @@ void Updater::fail(const QString &key, const QString &detail)
 bool Updater::download(const QString &url, const QString &dest, int timeoutSeconds,
                        bool retry)
 {
-    QDir().mkpath(QString::fromLatin1(kUpdateDir));
+    QDir().mkpath(devicePath(kUpdateDir));
     QFile::remove(dest);
     const int rc = inkViewDownload(url, dest, timeoutSeconds, retry);
     if (rc != 0) {
@@ -157,7 +157,7 @@ void Updater::check()
 
     updateLog(QStringLiteral("check: network is up"));
     publish(QStringLiteral("checking"));
-    const bool prerelease = QFile::exists(QString::fromLatin1(kPrereleaseFlag));
+    const bool prerelease = QFile::exists(devicePath(kPrereleaseFlag));
     if (prerelease)
         updateLog(QStringLiteral("check: pre-release channel"));
     const QString jsonPath = updatePath("latest.json");
@@ -260,8 +260,7 @@ void Updater::install()
     }
 
     /* Stage next to the installed binary: mv is only atomic within one mount. */
-    const QString staged = QCoreApplication::applicationFilePath()
-                           + QStringLiteral(".new");
+    const QString staged = appFilePath() + QStringLiteral(".new");
     updateLog(QStringLiteral("install: unpacking to ") + staged);
     if (!unpack(zipPath, staged)) {
         QFile::remove(zipPath);
@@ -335,12 +334,17 @@ bool Updater::launchHandover(const QString &staged)
     QFile script(scriptPath);
     if (!script.open(QIODevice::WriteOnly | QIODevice::Truncate))
         return false;
-    const QByteArray body =
-        handoverScript(QCoreApplication::applicationFilePath(), staged).toUtf8();
+    const QByteArray body = handoverScript(appFilePath(), staged).toUtf8();
     const bool written = script.write(body) == body.size() && script.flush();
     script.close();
     if (!written)
         return false;
 
+    /* The script waits for this process to exit, then moves the staged file
+     * onto the installed one and starts it. A host test wants everything up to
+     * that point and none of it: POCKETBOOK_STATISTICS_NO_HANDOVER stops at the
+     * written script, which is the part worth reading back. */
+    if (qEnvironmentVariableIsSet("POCKETBOOK_STATISTICS_NO_HANDOVER"))
+        return true;
     return QProcess::startDetached(QStringLiteral("/bin/sh"), {scriptPath});
 }

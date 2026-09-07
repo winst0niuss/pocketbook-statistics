@@ -12,6 +12,7 @@
 #include <QVector>
 
 #include "book_cover.h"
+#include "device_paths.h"
 #include "inkview_bridge.h"
 #include "update_log.h"
 
@@ -126,16 +127,17 @@ QString adoptedCover(const QString &hash, const QList<int> &storages)
     if (hash.isEmpty())
         return QString();
     const QString mine =
-        QStringLiteral(OWN_COVER_DIR "/fw_%1.png").arg(hash);
+        devicePath(OWN_COVER_DIR "/fw_") + hash + QStringLiteral(".png");
     if (QFile::exists(mine))
         return QUrl::fromLocalFile(mine).toString();
 
     for (int storage : storages) {
         const QString source =
-            QStringLiteral(COVER_DIR "/%1%2.png").arg(storage).arg(hash);
+            devicePath(COVER_DIR "/") + QString::number(storage) + hash
+            + QStringLiteral(".png");
         if (!QFile::exists(source))
             continue;
-        QDir().mkpath(QLatin1String(OWN_COVER_DIR));
+        QDir().mkpath(devicePath(OWN_COVER_DIR));
         if (QFile::copy(source, mine))
             return QUrl::fromLocalFile(mine).toString();
         return QUrl::fromLocalFile(source).toString(); /* copy failed, show it anyway */

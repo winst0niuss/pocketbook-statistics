@@ -275,22 +275,36 @@ static void upsert_book(tracker *t, const pb_state *s)
     adopt_cover(s->cover);
 }
 
-/* pages_end of this book's last earlier session, -1 if none. */
-static int prev_pages_end(tracker *t, int64_t bookid, int64_t before)
+/* pages_end of this book's last earlier session, -1 if none, and through
+ * `end_time` the moment that page was last recorded — which is what says
+ * whether the firmware has stamped a position since. */
+static int prev_pages_end_at(tracker *t, int64_t bookid, int64_t before,
+                             int64_t *end_time)
 {
     sqlite3_stmt *st = NULL;
     int val = -1;
     const char *sql =
-        "SELECT pages_end FROM sessions WHERE book_id=?1 AND start_time<?2"
-        " AND pages_end IS NOT NULL ORDER BY start_time DESC LIMIT 1";
+        "SELECT pages_end, end_time FROM sessions WHERE book_id=?1"
+        " AND start_time<?2 AND pages_end IS NOT NULL"
+        " ORDER BY start_time DESC LIMIT 1";
+    if (end_time)
+        *end_time = 0;
     if (sqlite3_prepare_v2(t->stats, sql, -1, &st, NULL) != SQLITE_OK)
         return -1;
     sqlite3_bind_int64(st, 1, bookid);
     sqlite3_bind_int64(st, 2, before);
-    if (sqlite3_step(st) == SQLITE_ROW)
+    if (sqlite3_step(st) == SQLITE_ROW) {
         val = sqlite3_column_int(st, 0);
+        if (end_time)
+            *end_time = sqlite3_column_int64(st, 1);
+    }
     sqlite3_finalize(st);
     return val;
+}
+
+static int prev_pages_end(tracker *t, int64_t bookid, int64_t before)
+{
+    return prev_pages_end_at(t, bookid, before, NULL);
 }
 
 /* Wall clock and the monotonic clock disagree by exactly the time the device
@@ -885,7 +899,31 @@ int tracker_observe(tracker *t, const pb_state *s)
          * span from the open to the last page turn is reading nobody watched,
          * and the pages since this book's previous session say how much of it
          * to believe. */
-        const int prev = prev_pages_end(t, open.bookid, open.opentime);
+        int64_t prev_end = 0;
+        const int prev =
+            prev_pages_end_at(t, open.bookid, open.opentime, &prev_end);
+        /* A cpage no position_ts vouches for is not a position. Measured on a
+         * PB629: a book left at page 177 read back as page 4 on the reopen
+         * while position_ts still belonged to the previous session — most
+         * likely the reflowable EPUB being repaginated, which moves cpage
+         * without the firmware saving anything. The window here is zero
+         * seconds wide and credits nothing either way; the damage is that the
+         * 4 becomes the baseline the *next* window is measured from, and the
+         * real save at page 211 seventeen minutes later then looked like a
+         * 207-page jump. The whole evening, both sides of midnight, was
+         * dropped. The test is the timestamp and not the value: a page the
+         * reader genuinely turned back to before closing the book came with a
+         * save, so its position_ts stands past the last row's end and the
+         * reading that follows is measured from there as before. Both halves
+         * are needed: nothing saved since the open, and nothing saved since
+         * the row before it. */
+        if (prev >= 0 && s->position_ts <= prev_end &&
+            s->position_ts <= s->opentime) {
+            if (open.cpage != prev)
+                pb_log("open: page %d carries no save, baseline stays %d",
+                       open.cpage, prev);
+            open.cpage = prev;
+        }
         const int delta = prev < 0 ? -1 : open.cpage - prev;
         const int64_t span = open.position_ts - open.opentime;
         int64_t active = credited(span, delta);

@@ -144,6 +144,82 @@ static long q1(sqlite3 *db, const char *sql)
  * that follows it. Taken from a real device, where 14 minutes and 10 turned
  * pages arrived as a day with no reading at all: the new session's own window
  * is zero seconds wide, and ten pages inside it read as a jump. */
+/* A page the firmware has not stamped is not a position. A reflowable EPUB is
+ * repaginated when it is opened, and while that runs books_settings reports a
+ * page from near the front with the *previous* session's position_ts beside
+ * it. Measured on a PB629 (07.09.2026): a book left at page 177 read back as
+ * page 4 on the reopen, and the real save seventeen minutes later at page 211
+ * then looked like a 207-page jump — the evening was dropped on both sides of
+ * midnight and the app showed 0 minutes read. */
+static void test_reopen_while_repaginating(sqlite3 *exp)
+{
+    const char *db_path = "/tmp/bs_test_repaginate.db";
+    unlink(db_path);
+    tracker t;
+    assert(tracker_init(&t, db_path, EXP_DB) == 0);
+    set_since(t.stats, "0");
+
+    const long t0 = today_noon();
+    char sql[256];
+    pb_state s;
+
+    /* An evening's session, last saved at page 177. */
+    set_state(exp, t0, t0 + 30, 177);
+    assert(tracker_read_state(EXP_DB, &s) == 0);
+    assert(tracker_observe(&t, &s) == 1);
+
+    /* The book is reopened. position_ts still belongs to the session before,
+     * and cpage is whatever the pagination has reached so far. */
+    set_state(exp, t0 + 1600, t0 + 30, 4);
+    assert(tracker_read_state(EXP_DB, &s) == 0);
+    assert(tracker_observe(&t, &s) == 1);
+    snprintf(sql, sizeof(sql),
+             "SELECT pages_end FROM sessions WHERE start_time=%ld", t0 + 1600);
+    assert(q1(t.stats, sql) == 177);
+
+    /* Seventeen minutes of reading, then the firmware saves at page 211: 34
+     * pages across 1004 s is a pace, not a jump, and the whole window counts.
+     * The tracker is rebuilt first, because on the device it is catchUp() that
+     * sees this — a fresh tracker resuming the row. */
+    tracker_close(&t);
+    assert(tracker_init(&t, db_path, EXP_DB) == 0);
+    set_state(exp, t0 + 1600, t0 + 2604, 211);
+    assert(tracker_read_state(EXP_DB, &s) == 0);
+    assert(tracker_observe(&t, &s) == 2);
+    snprintf(sql, sizeof(sql),
+             "SELECT active_seconds FROM sessions WHERE start_time=%ld",
+             t0 + 1600);
+    assert(q1(t.stats, sql) == 1004);
+    snprintf(sql, sizeof(sql),
+             "SELECT pages_read FROM sessions WHERE start_time=%ld", t0 + 1600);
+    assert(q1(t.stats, sql) == 34);
+
+    /* The mirror case: a page turned back to *with* a save behind it is a real
+     * position, and the reading that follows is measured from there. */
+    tracker_close(&t);
+    unlink(db_path);
+    assert(tracker_init(&t, db_path, EXP_DB) == 0);
+    set_since(t.stats, "0");
+    set_state(exp, t0, t0 + 30, 177);
+    assert(tracker_read_state(EXP_DB, &s) == 0);
+    assert(tracker_observe(&t, &s) == 1);
+    set_state(exp, t0 + 1600, t0 + 900, 100); /* saved at 100 before the reopen */
+    assert(tracker_read_state(EXP_DB, &s) == 0);
+    assert(tracker_observe(&t, &s) == 1);
+    snprintf(sql, sizeof(sql),
+             "SELECT pages_end FROM sessions WHERE start_time=%ld", t0 + 1600);
+    assert(q1(t.stats, sql) == 100);
+    set_state(exp, t0 + 1600, t0 + 2200, 110);
+    assert(tracker_read_state(EXP_DB, &s) == 0);
+    assert(tracker_observe(&t, &s) == 2);
+    snprintf(sql, sizeof(sql),
+             "SELECT pages_read FROM sessions WHERE start_time=%ld", t0 + 1600);
+    assert(q1(t.stats, sql) == 10);
+
+    tracker_close(&t);
+    unlink(db_path);
+}
+
 static void test_reopen_after_poweroff(sqlite3 *exp)
 {
     const char *db_path = "/tmp/bs_test_reopen.db";
@@ -1310,6 +1386,7 @@ int main(void)
     tracker_close(&jumper);
 
     test_reopen_after_poweroff(exp);
+    test_reopen_while_repaginating(exp);
     test_reopen_across_midnight(exp);
     test_year_days();
     test_stats_book();

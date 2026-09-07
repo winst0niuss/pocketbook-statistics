@@ -15,6 +15,7 @@ pocketbook_add_app(PocketBookStatistics
   SOURCES
     qt/src/main.cpp
     qt/src/inkview_bridge.cpp
+    qt/src/device_paths.cpp
     qt/src/stats_bridge.cpp
     qt/src/book_cover.cpp
     qt/src/installer.cpp
