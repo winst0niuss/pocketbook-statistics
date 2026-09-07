@@ -294,20 +294,38 @@ Item {
             toMonth: 11
         }
 
-        /* A Flow, not a Row: two legends still run long in some languages, and
-         * wrapping is better than a word running off the edge. */
-        Flow {
+        /* Centred under the grid, which is what the two of them read as: a
+         * caption for the squares above rather than a row of the page.
+         * A Flow and not a Row, because two legends still run long in some
+         * languages and wrapping is better than a word running off the edge —
+         * so the width is what they need, and only the full width once they no
+         * longer fit on one line. */
+        Item {
             width: parent.width
-            spacing: Global.dp(16)
+            height: legendRow.height
 
-            LegendItem {
-                mark: 0
-                text: Tr.t("streak.notRead")
-            }
+            Flow {
+                id: legendRow
 
-            LegendItem {
-                mark: 1
-                text: Tr.t("streak.read")
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: Math.min(notReadLegend.implicitWidth + spacing
+                                    + readLegend.implicitWidth,
+                                parent.width)
+                spacing: Global.dp(16)
+
+                LegendItem {
+                    id: notReadLegend
+
+                    mark: 0
+                    text: Tr.t("streak.notRead")
+                }
+
+                LegendItem {
+                    id: readLegend
+
+                    mark: 1
+                    text: Tr.t("streak.read")
+                }
             }
         }
 

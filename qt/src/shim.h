@@ -16,12 +16,20 @@ class Shim : public QObject {
 public:
     explicit Shim(QObject *parent = nullptr);
 
-    /* True when the script is in place and at least one format names it. */
+    /* True when the script is in place and *every* format this device can open
+     * names it. Anything less has to read as off, so pressing the switch
+     * finishes the job instead of appearing to be done already. */
     Q_INVOKABLE bool installed() const;
-    /* Rewrites the installed script if the app now ships a different one.
-     * Called at startup: an app update otherwise leaves the old script in
-     * place forever, since nothing else ever touches it. */
+    /* Brings an installed shim up to date: the script if the app now ships a
+     * different one, and the extensions.cfg entries if this build reads more
+     * formats than the one that installed it. Called at startup — nothing else
+     * ever touches either, so a fix to them would otherwise never reach the
+     * reader. Does nothing where the shim is not installed. */
     void refresh();
+    /* Installs the shim the first time the app runs, because a reading tracker
+     * that only counts while it is open is not one. Once ever: a marker file
+     * records that the decision has been made, so turning it off again holds. */
+    void enableByDefault();
     Q_INVOKABLE bool install();
     Q_INVOKABLE bool remove();
 };
