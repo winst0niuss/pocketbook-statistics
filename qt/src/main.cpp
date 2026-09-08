@@ -12,6 +12,7 @@ extern "C" {
 #include <QQmlContext>
 #include <QQuickWindow>
 #include <QString>
+#include <QStringList>
 #include <QUrl>
 #include <QtGlobal>
 
@@ -29,23 +30,74 @@ constexpr const char *kQmlPath = "/ebrmain/qml";
 constexpr const char *kPlatformName = "pocketbook2";
 constexpr const char *kSceneUrl = "qrc:/main.qml";
 
+/* A build with a suffix on its version is a build somebody has been asked to
+ * test, and the question asked of it is always the same one: how far did it
+ * get. Marks through startup earn their lines there; in a release they would
+ * be half a dozen lines of "nothing wrong" a launch, drowning the week's
+ * signal. */
+bool verboseStartup()
+{
+    return std::strchr(APP_VERSION, '-') != nullptr;
+}
+
+void mark(const QString &stage)
+{
+    if (verboseStartup())
+        updateLog(QStringLiteral("app: ") + stage);
+}
+
+/* The QPA plugin is loaded by name, and a name this firmware does not carry is
+ * a qFatal inside the QGuiApplication constructor — on a device with no console
+ * the app dies there having said nothing, which looks exactly like never having
+ * been started. So ask the directory first: what is in it is what can be
+ * loaded. `pocketbook2` where it exists, anything else PocketBook's rather than
+ * nothing, and Qt's own choice when the directory cannot be read. */
+QByteArray choosePlatform()
+{
+    QStringList names;
+    const QDir dir(QString::fromLatin1(kPluginPath) + QStringLiteral("/platforms"));
+    const QStringList files = dir.entryList({QStringLiteral("lib*.so")}, QDir::Files);
+    for (const QString &file : files)
+        names += file.mid(3, file.size() - 6);
+
+    const QString preferred = QString::fromLatin1(kPlatformName);
+    if (names.contains(preferred))
+        return QByteArray(kPlatformName);
+
+    /* Not a mark: a reader without the plugin this was built for is the whole
+     * report, and it is worth a line in any build. */
+    updateLog(QStringLiteral("app: no %1 platform plugin, found [%2]")
+                  .arg(preferred, names.join(QStringLiteral(", "))));
+
+    for (const QString &name : names) {
+        if (name.startsWith(QLatin1String("pocketbook")))
+            return name.toUtf8();
+    }
+    return {};
+}
+
 void selectPlatformPlugin()
 {
     if (qEnvironmentVariableIsEmpty("QT_PLUGIN_PATH"))
         qputenv("QT_PLUGIN_PATH", QByteArray(kPluginPath));
-    if (qEnvironmentVariableIsEmpty("QT_QPA_PLATFORM"))
-        qputenv("QT_QPA_PLATFORM", QByteArray(kPlatformName));
+    if (!qEnvironmentVariableIsEmpty("QT_QPA_PLATFORM"))
+        return;
+    const QByteArray platform = choosePlatform();
+    if (!platform.isEmpty())
+        qputenv("QT_QPA_PLATFORM", platform);
 }
 
 /* Qt writes its own diagnostics to stderr, and this device has none: a QML
  * error is printed where nobody can read it, and the app then closes itself
- * with no explanation anywhere. Route the warnings into app.log for the one
- * stretch where that matters — building the scene. */
+ * with no explanation anywhere. Route the warnings into app.log for the whole
+ * of startup — the QML scene is not the only thing that can fail there, and a
+ * platform plugin that will not load is a qFatal in the QGuiApplication
+ * constructor, which is to say the last thing this process ever does. */
 void logQtMessage(QtMsgType type, const QMessageLogContext &, const QString &text)
 {
     if (type == QtDebugMsg || type == QtInfoMsg)
         return;
-    updateLog(QStringLiteral("qml: ") + text);
+    updateLog(QStringLiteral("qt: ") + text);
 }
 
 } // namespace
@@ -65,6 +117,9 @@ int main(int argc, char *argv[])
     updateLog(QStringLiteral("app: start, version " APP_VERSION ", Qt %1")
                   .arg(QString::fromLatin1(qVersion())));
 
+    /* From here to the scene, everything Qt has to say goes into the log. */
+    QtMessageHandler previous = qInstallMessageHandler(logQtMessage);
+
     selectPlatformPlugin();
     QCoreApplication::setSetuidAllowed(true);
 
@@ -76,6 +131,7 @@ int main(int argc, char *argv[])
 
     // Register the launcher icon on first run (idempotent, no-op afterwards).
     ensureRegistered();
+    mark(QStringLiteral("launcher registered"));
 
     /* Compiling the QML takes ~3 s of the 3.5 s this app needs to appear, and
      * it happens on every launch: Qt disk-caches compiled QML, but not when it
@@ -92,10 +148,13 @@ int main(int argc, char *argv[])
     QQuickWindow::setGraphicsApi(QSGRendererInterface::Software);
 
     QGuiApplication app(argc, argv);
+    mark(QStringLiteral("Qt up on ") + QGuiApplication::platformName());
 
     const QString fontFamily = inkViewFontFamily();
     if (!fontFamily.isEmpty())
         QGuiApplication::setFont(QFont(fontFamily));
+    mark(QStringLiteral("font ") + (fontFamily.isEmpty() ? QStringLiteral("(Qt default)")
+                                                         : fontFamily));
 
     StatsBridge stats;
     Updater updater;
@@ -106,6 +165,7 @@ int main(int argc, char *argv[])
      * at boot, so without it the day is measured only while the app happens to
      * be open. */
     shim.enableByDefault();
+    mark(QStringLiteral("shim checked"));
     spawn_daemon(QGuiApplication::applicationFilePath().toUtf8().constData());
 
     QQmlApplicationEngine engine;
@@ -119,7 +179,7 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty(QStringLiteral("screenH"), screen.height);
     engine.rootContext()->setContextProperty(QStringLiteral("panelH"), screen.panelHeight);
 
-    QtMessageHandler previous = qInstallMessageHandler(logQtMessage);
+    mark(QStringLiteral("loading scene"));
     engine.load(QUrl(QString::fromUtf8(kSceneUrl)));
     if (engine.rootObjects().isEmpty()) {
         /* The scene failed to instantiate — a QML mistake the lint gate let
@@ -133,5 +193,6 @@ int main(int argc, char *argv[])
     /* Off again once the scene stands: what Qt has to say after that is noise,
      * and the log is 64 KB for a week. */
     qInstallMessageHandler(previous);
+    mark(QStringLiteral("scene up"));
     return app.exec();
 }
