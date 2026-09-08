@@ -13,6 +13,7 @@ extern "C" {
 #include <QQuickWindow>
 #include <QString>
 #include <QUrl>
+#include <QtGlobal>
 
 #include "inkview_bridge.h"
 #include "installer.h"
@@ -36,6 +37,17 @@ void selectPlatformPlugin()
         qputenv("QT_QPA_PLATFORM", QByteArray(kPlatformName));
 }
 
+/* Qt writes its own diagnostics to stderr, and this device has none: a QML
+ * error is printed where nobody can read it, and the app then closes itself
+ * with no explanation anywhere. Route the warnings into app.log for the one
+ * stretch where that matters — building the scene. */
+void logQtMessage(QtMsgType type, const QMessageLogContext &, const QString &text)
+{
+    if (type == QtDebugMsg || type == QtInfoMsg)
+        return;
+    updateLog(QStringLiteral("qml: ") + text);
+}
+
 } // namespace
 
 int main(int argc, char *argv[])
@@ -44,10 +56,23 @@ int main(int argc, char *argv[])
     if (argc > 1 && std::strcmp(argv[1], "--daemon") == 0)
         return run_daemon();
 
+    /* Before anything else, and before any Qt call: on a firmware this was not
+     * built against, the process can die at the first missing symbol, and a
+     * start line written later would never be reached — leaving a report with
+     * no log at all indistinguishable from one where the app never ran. The Qt
+     * the reader supplies is half of that answer, so it goes in the same line;
+     * qVersion() is the runtime's, not the 6.8.2 this was compiled against. */
+    updateLog(QStringLiteral("app: start, version " APP_VERSION ", Qt %1")
+                  .arg(QString::fromLatin1(qVersion())));
+
     selectPlatformPlugin();
     QCoreApplication::setSetuidAllowed(true);
 
     const ScreenSize screen = openInkViewScreen();
+    /* The layout is built from these three numbers, so a screen report from an
+     * unknown reader is worth the line. */
+    updateLog(QStringLiteral("app: screen %1x%2, panel %3")
+                  .arg(screen.width).arg(screen.height).arg(screen.panelHeight));
 
     // Register the launcher icon on first run (idempotent, no-op afterwards).
     ensureRegistered();
@@ -67,7 +92,6 @@ int main(int argc, char *argv[])
     QQuickWindow::setGraphicsApi(QSGRendererInterface::Software);
 
     QGuiApplication app(argc, argv);
-    updateLog(QStringLiteral("app: start, version " APP_VERSION));
 
     const QString fontFamily = inkViewFontFamily();
     if (!fontFamily.isEmpty())
@@ -95,13 +119,19 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty(QStringLiteral("screenH"), screen.height);
     engine.rootContext()->setContextProperty(QStringLiteral("panelH"), screen.panelHeight);
 
+    QtMessageHandler previous = qInstallMessageHandler(logQtMessage);
     engine.load(QUrl(QString::fromUtf8(kSceneUrl)));
     if (engine.rootObjects().isEmpty()) {
         /* The scene failed to instantiate — a QML mistake the lint gate let
-         * through. There is no console on this device, so without this line
-         * the app simply never opens and says nothing. */
+         * through, or a firmware whose com.pocketbook.controls is not the one
+         * this was written against. There is no console on this device, so
+         * without the handler above the app simply never opens and says
+         * nothing; the lines before this one name the type that failed. */
         updateLog(QStringLiteral("app: QML scene is empty, exiting"));
         return 1;
     }
+    /* Off again once the scene stands: what Qt has to say after that is noise,
+     * and the log is 64 KB for a week. */
+    qInstallMessageHandler(previous);
     return app.exec();
 }
