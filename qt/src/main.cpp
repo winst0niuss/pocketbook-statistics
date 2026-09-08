@@ -173,6 +173,7 @@ int main(int argc, char *argv[])
     StatsBridge stats;
     Updater updater;
     Shim shim;
+    mark(QStringLiteral("bridges up"));
     /* An app update ships a new shim; nothing else would ever install it. */
     shim.refresh();
     /* And on a device that has never had one, put it in: nothing of ours starts

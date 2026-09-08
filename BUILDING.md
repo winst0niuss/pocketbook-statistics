@@ -131,8 +131,9 @@ tools/          icon generator, QML checker, catalog checker
 - `src/*.c` is plain C shared by the daemon and the Qt app: `tracker.c` derives
   sessions from `explorer-3.db`, `stats_db.c` runs the aggregation queries,
   `daemon.c` is the poll loop.
-- `qt/src/main.cpp` boots Qt against the device's plugins (QPA `pocketbook2`,
-  software rendering), starts the daemon, and loads the QML scene.
+- `qt/src/main.cpp` boots Qt against the device's plugins (QPA `pocketbook2`
+  where the reader has it, software rendering), starts the daemon, and loads
+  the QML scene.
 - `qt/src/stats_bridge.cpp` exposes the C stats to QML; `book_cover.cpp` pulls
   covers out of EPUB, FB2 and CBZ files with miniz; `installer.cpp` registers
   the launcher icon on first run; `shim.cpp` installs the small script that
