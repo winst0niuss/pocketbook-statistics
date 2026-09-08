@@ -50,39 +50,53 @@ void mark(const QString &stage)
  * a qFatal inside the QGuiApplication constructor — on a device with no console
  * the app dies there having said nothing, which looks exactly like never having
  * been started. So ask the directory first: what is in it is what can be
- * loaded. `pocketbook2` where it exists, anything else PocketBook's rather than
- * nothing, and Qt's own choice when the directory cannot be read. */
-QByteArray choosePlatform()
+ * loaded. */
+QByteArray choosePlatform(const QString &pluginPath)
 {
+    const QDir dir(pluginPath + QStringLiteral("/platforms"));
     QStringList names;
-    const QDir dir(QString::fromLatin1(kPluginPath) + QStringLiteral("/platforms"));
     const QStringList files = dir.entryList({QStringLiteral("lib*.so")}, QDir::Files);
     for (const QString &file : files)
         names += file.mid(3, file.size() - 6);
 
+    /* An empty listing is a directory we could not read, not a plugin that is
+     * missing, and the difference matters: every reader this has run on so far
+     * answered to pocketbook2, so guessing again on no evidence would break a
+     * working device to help a broken one. */
     const QString preferred = QString::fromLatin1(kPlatformName);
-    if (names.contains(preferred))
+    if (names.isEmpty() || names.contains(preferred))
         return QByteArray(kPlatformName);
 
-    /* Not a mark: a reader without the plugin this was built for is the whole
-     * report, and it is worth a line in any build. */
-    updateLog(QStringLiteral("app: no %1 platform plugin, found [%2]")
-                  .arg(preferred, names.join(QStringLiteral(", "))));
-
+    QByteArray chosen;
     for (const QString &name : names) {
-        if (name.startsWith(QLatin1String("pocketbook")))
-            return name.toUtf8();
+        if (name.startsWith(QLatin1String("pocketbook"))) {
+            chosen = name.toUtf8();
+            break;
+        }
     }
-    return {};
+    /* Not a mark: a reader that does not have the plugin this was built for is
+     * the whole report, and it is worth a line in any build. */
+    updateLog(QStringLiteral("app: no %1 platform plugin, found [%2], using %3")
+                  .arg(preferred, names.join(QStringLiteral(", ")),
+                       chosen.isEmpty() ? QStringLiteral("Qt's own default")
+                                        : QString::fromUtf8(chosen)));
+    return chosen;
 }
 
 void selectPlatformPlugin()
 {
-    if (qEnvironmentVariableIsEmpty("QT_PLUGIN_PATH"))
-        qputenv("QT_PLUGIN_PATH", QByteArray(kPluginPath));
+    QByteArray pluginPath = qgetenv("QT_PLUGIN_PATH");
+    if (pluginPath.isEmpty()) {
+        pluginPath = QByteArray(kPluginPath);
+        qputenv("QT_PLUGIN_PATH", pluginPath);
+    }
     if (!qEnvironmentVariableIsEmpty("QT_QPA_PLATFORM"))
         return;
-    const QByteArray platform = choosePlatform();
+
+    /* Only the first entry of a multi-path list is looked in; on this firmware
+     * there is never more than the one just put there. */
+    const QByteArray platform = choosePlatform(
+        QString::fromLocal8Bit(pluginPath).section(QLatin1Char(':'), 0, 0));
     if (!platform.isEmpty())
         qputenv("QT_QPA_PLATFORM", platform);
 }
