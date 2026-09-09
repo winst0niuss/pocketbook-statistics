@@ -1,4 +1,5 @@
 #include <cstring>
+#include <vector>
 
 extern "C" {
 #include "daemon.h"
@@ -68,6 +69,32 @@ void selectPlatformPlugin()
     qputenv("QT_QPA_PLATFORM", QByteArray(kPlatformName));
 }
 
+/* Qt reads the platform name from the command line before it reads the
+ * environment, so a launcher passing -platform outranks the qputenv above and
+ * our name never gets a look. Nothing on a PocketBook is known to pass one —
+ * but the reader that broke got its name through a channel nobody had thought
+ * to check either, and an argument that never reaches QGuiApplication cannot
+ * outrank the plugin this app needs. Everything else is handed on untouched;
+ * the array has to outlive the application object, which keeps a pointer to
+ * it. Returns the new argc. */
+int dropPlatformArgs(int argc, char **argv, std::vector<char *> &kept)
+{
+    for (int i = 0; i < argc; i++) {
+        char *arg = argv[i];
+        if (std::strcmp(arg, "-platform") == 0
+            || std::strcmp(arg, "--platform") == 0) {
+            i++; /* and the name that follows it */
+            continue;
+        }
+        if (std::strncmp(arg, "-platform=", 10) == 0
+            || std::strncmp(arg, "--platform=", 11) == 0)
+            continue;
+        kept.push_back(arg);
+    }
+    kept.push_back(nullptr);
+    return static_cast<int>(kept.size()) - 1;
+}
+
 /* Qt writes its own diagnostics to stderr, and this device has none: a QML
  * error is printed where nobody can read it, and the app then closes itself
  * with no explanation anywhere. Route the warnings into app.log for the whole
@@ -135,7 +162,21 @@ int main(int argc, char *argv[])
 
     QQuickWindow::setGraphicsApi(QSGRendererInterface::Software);
 
-    QGuiApplication app(argc, argv);
+    /* How the firmware starts us is the one thing a log of a startup that dies
+     * before drawing cannot reconstruct afterwards. */
+    if (verboseStartup()) {
+        QString line;
+        for (int i = 0; i < argc; i++)
+            line += QLatin1Char(' ') + QString::fromLocal8Bit(argv[i]);
+        mark(QStringLiteral("argv:") + line);
+    }
+
+    std::vector<char *> args;
+    int count = dropPlatformArgs(argc, argv, args);
+    if (count != argc)
+        mark(QStringLiteral("dropped -platform from the command line"));
+
+    QGuiApplication app(count, args.data());
     mark(QStringLiteral("Qt up on ") + QGuiApplication::platformName());
 
     const QString fontFamily = inkViewFontFamily();
