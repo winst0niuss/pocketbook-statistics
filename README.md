@@ -123,9 +123,7 @@ Confirmed working on:
 
 - **PocketBook Verse (PB629)**, firmware U629.6.10.1461 — the reader this is
   developed on.
-- **PocketBook Verse Pro (PB634)**, firmware 634.10.3425 — reported working
-  since 2.1.1 ([#10](../../issues/10)), thanks to the owner who ran the test
-  builds.
+- **PocketBook Verse Pro (PB634)**, firmware 634.10.3425 — working since 2.1.1.
 
 Other Allwinner **B288/B300** readers with Qt 6.8 firmware should work, but
 nobody has tried yet. The app uses the Qt libraries that are already on the
