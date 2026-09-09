@@ -45,20 +45,27 @@ void mark(const QString &stage)
         updateLog(QStringLiteral("app: ") + stage);
 }
 
-/* The plugin is named, not looked for. A build that read
- * `<QT_PLUGIN_PATH>/platforms` and picked from what it found asked a PB634 for
- * "pocketbook" and died: that directory held a name Qt 6 will not load, while
- * the pocketbook2 plugin it does load came from a search path of Qt's own —
- * so the listing is not an inventory of what can be loaded, and a guess built
- * on it replaces a name that works with one that does not. Qt names the
- * alternatives itself when it fails, and that message now reaches the log,
- * which is all a reader that needs a different name has to say. */
+/* The plugin is named, and the name is ours to set — not the environment's.
+ * A PB634 (issue #10) starts this process with QT_QPA_PLATFORM already reading
+ * "pocketbook", a plugin Qt 6 there cannot load: it lists pocketbook2 as the
+ * only PocketBook one it has. Setting ours "only when empty" therefore left
+ * that value standing and the app died in the QGuiApplication constructor,
+ * which on a device with no console says nothing at all. So it is set every
+ * time, and what was inherited goes in the log of a build that is being tested.
+ *
+ * Called after InitInkview rather than before it: the value is inherited on
+ * that reader, but a firmware that sets it from inside InitInkview would
+ * otherwise overwrite ours, and this way neither can. */
 void selectPlatformPlugin()
 {
     if (qEnvironmentVariableIsEmpty("QT_PLUGIN_PATH"))
         qputenv("QT_PLUGIN_PATH", QByteArray(kPluginPath));
-    if (qEnvironmentVariableIsEmpty("QT_QPA_PLATFORM"))
-        qputenv("QT_QPA_PLATFORM", QByteArray(kPlatformName));
+
+    const QByteArray inherited = qgetenv("QT_QPA_PLATFORM");
+    if (!inherited.isEmpty() && inherited != QByteArray(kPlatformName))
+        mark(QStringLiteral("QT_QPA_PLATFORM was ")
+             + QString::fromLocal8Bit(inherited));
+    qputenv("QT_QPA_PLATFORM", QByteArray(kPlatformName));
 }
 
 /* Qt writes its own diagnostics to stderr, and this device has none: a QML
@@ -100,7 +107,6 @@ int main(int argc, char *argv[])
     /* From here to the scene, everything Qt has to say goes into the log. */
     QtMessageHandler previous = qInstallMessageHandler(logQtMessage);
 
-    selectPlatformPlugin();
     QCoreApplication::setSetuidAllowed(true);
 
     const ScreenSize screen = openInkViewScreen();
@@ -108,6 +114,8 @@ int main(int argc, char *argv[])
      * unknown reader is worth the line. */
     updateLog(QStringLiteral("app: screen %1x%2, panel %3")
                   .arg(screen.width).arg(screen.height).arg(screen.panelHeight));
+
+    selectPlatformPlugin();
 
     // Register the launcher icon on first run (idempotent, no-op afterwards).
     ensureRegistered();
