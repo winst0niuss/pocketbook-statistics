@@ -2,6 +2,7 @@
 
 #include <QByteArray>
 #include <QFile>
+#include <QStringList>
 
 #include <dlfcn.h>
 
@@ -61,6 +62,25 @@ QString inkViewLang()
         return QString();
     const char *value = lang();
     return value != nullptr ? QString::fromUtf8(value) : QString();
+}
+
+QString inkViewDeviceInfo()
+{
+    static const QString info = [] {
+        QStringList parts;
+        const char *names[] = {"GetDeviceModel", "GetHardwareType",
+                               "GetSoftwareVersion"};
+        for (const char *name : names) {
+            const auto fn = resolve<char *(*)()>(name);
+            if (fn == nullptr)
+                continue;
+            const char *value = fn();
+            if (value != nullptr && *value != '\0')
+                parts += QString::fromUtf8(value);
+        }
+        return parts.join(QLatin1Char(' '));
+    }();
+    return info;
 }
 
 /* Opening a book is the firmware's own job: OpenBook looks up the handler for

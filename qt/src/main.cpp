@@ -3,6 +3,7 @@
 
 extern "C" {
 #include "daemon.h"
+#include "log.h"
 }
 
 #include <QByteArray>
@@ -42,8 +43,22 @@ bool verboseStartup()
 
 void mark(const QString &stage)
 {
+    /* Recorded whether or not it is printed: a process killed by a signal
+     * prints nothing of its own, and the crash line the logger writes for it
+     * quotes this — which is the only thing that will say where it was. */
+    const QByteArray utf8 = stage.toUtf8();
+    pb_log_stage(utf8.constData());
     if (verboseStartup())
         updateLog(QStringLiteral("app: ") + stage);
+}
+
+/* Something worth knowing about the reader, as against a step of the startup:
+ * it says what was found, not how far we got, so it must never become the
+ * stage a crash is blamed on. */
+void note(const QString &text)
+{
+    if (verboseStartup())
+        updateLog(QStringLiteral("app: ") + text);
 }
 
 /* The plugin is named, and the name is ours to set — not the environment's.
@@ -59,13 +74,17 @@ void mark(const QString &stage)
  * otherwise overwrite ours, and this way neither can. */
 void selectPlatformPlugin()
 {
-    if (qEnvironmentVariableIsEmpty("QT_PLUGIN_PATH"))
-        qputenv("QT_PLUGIN_PATH", QByteArray(kPluginPath));
+    const QByteArray inheritedPath = qgetenv("QT_PLUGIN_PATH");
+    const QByteArray inheritedPlatform = qgetenv("QT_QPA_PLATFORM");
+    note(QStringLiteral("inherited QT_PLUGIN_PATH=\"%1\" QT_QPA_PLATFORM=\"%2\"")
+             .arg(QString::fromLocal8Bit(inheritedPath),
+                  QString::fromLocal8Bit(inheritedPlatform)));
 
-    const QByteArray inherited = qgetenv("QT_QPA_PLATFORM");
-    if (!inherited.isEmpty() && inherited != QByteArray(kPlatformName))
-        mark(QStringLiteral("QT_QPA_PLATFORM was ")
-             + QString::fromLocal8Bit(inherited));
+    /* The path is left alone where the firmware set one: Qt found pocketbook2
+     * on the reader that broke, so whatever it points at is working. The name
+     * is not left alone, for the reason above. */
+    if (inheritedPath.isEmpty())
+        qputenv("QT_PLUGIN_PATH", QByteArray(kPluginPath));
     qputenv("QT_QPA_PLATFORM", QByteArray(kPlatformName));
 }
 
@@ -130,6 +149,7 @@ int main(int argc, char *argv[])
      * qVersion() is the runtime's, not the 6.8.2 this was compiled against. */
     updateLog(QStringLiteral("app: start, version " APP_VERSION ", Qt %1")
                   .arg(QString::fromLatin1(qVersion())));
+    pb_log_install_crash_handler();
 
     /* From here to the scene, everything Qt has to say goes into the log. */
     QtMessageHandler previous = qInstallMessageHandler(logQtMessage);
@@ -137,9 +157,12 @@ int main(int argc, char *argv[])
     QCoreApplication::setSetuidAllowed(true);
 
     const ScreenSize screen = openInkViewScreen();
-    /* The layout is built from these three numbers, so a screen report from an
-     * unknown reader is worth the line. */
-    updateLog(QStringLiteral("app: screen %1x%2, panel %3")
+    /* The layout is built from these three numbers and every report about a
+     * reader nobody here owns begins with which one it is, so the line carries
+     * both. The device names itself only after InitInkview. */
+    const QString device = inkViewDeviceInfo();
+    updateLog(QStringLiteral("app: %1screen %2x%3, panel %4")
+                  .arg(device.isEmpty() ? QString() : device + QStringLiteral(", "))
                   .arg(screen.width).arg(screen.height).arg(screen.panelHeight));
 
     selectPlatformPlugin();
@@ -168,13 +191,13 @@ int main(int argc, char *argv[])
         QString line;
         for (int i = 0; i < argc; i++)
             line += QLatin1Char(' ') + QString::fromLocal8Bit(argv[i]);
-        mark(QStringLiteral("argv:") + line);
+        note(QStringLiteral("argv:") + line);
     }
 
     std::vector<char *> args;
     int count = dropPlatformArgs(argc, argv, args);
     if (count != argc)
-        mark(QStringLiteral("dropped -platform from the command line"));
+        note(QStringLiteral("dropped -platform from the command line"));
 
     QGuiApplication app(count, args.data());
     mark(QStringLiteral("Qt up on ") + QGuiApplication::platformName());
@@ -223,6 +246,12 @@ int main(int argc, char *argv[])
     /* Off again once the scene stands: what Qt has to say after that is noise,
      * and the log is 64 KB for a week. */
     qInstallMessageHandler(previous);
-    mark(QStringLiteral("scene up"));
+    /* The size the scene came out at, against the screen reported above: a
+     * layout built for another reader's geometry is a thing the log can show
+     * without anyone having to photograph it. */
+    const QObject *root = engine.rootObjects().constFirst();
+    mark(QStringLiteral("scene up %1x%2")
+             .arg(root->property("width").toInt())
+             .arg(root->property("height").toInt()));
     return app.exec();
 }

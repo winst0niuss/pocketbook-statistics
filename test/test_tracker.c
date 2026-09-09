@@ -8,7 +8,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <signal.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -610,6 +612,31 @@ static void test_log_rotation(void)
     char tmp[256];
     snprintf(tmp, sizeof(tmp), "%s.%d", log_path, (int)getpid());
     assert(stat(tmp, &st) != 0);
+
+    unlink(log_path);
+
+    /* A death by signal has to leave the one line that says where it was: on a
+     * reader there is no console, no core and no exit code to read, so without
+     * it a crash and a clean exit are the same silence. Run it in a child,
+     * because the point of the handler is that the process still dies. */
+    pb_log_stage("loading scene");
+    pb_log_install_crash_handler();
+    pid_t child = fork();
+    assert(child >= 0);
+    if (child == 0) {
+        raise(SIGSEGV);
+        _exit(0); /* not reached: the handler hands the signal back */
+    }
+    int status = 0;
+    assert(waitpid(child, &status, 0) == child);
+    assert(WIFSIGNALED(status) && WTERMSIG(status) == SIGSEGV);
+
+    f = fopen(log_path, "r");
+    assert(f);
+    char crash[256] = {0};
+    assert(fgets(crash, sizeof(crash), f) != NULL);
+    fclose(f);
+    assert(strcmp(crash, "app: killed by signal 11 during loading scene\n") == 0);
 
     unlink(log_path);
     unsetenv("POCKETBOOK_STATISTICS_LOG");
