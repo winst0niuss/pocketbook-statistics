@@ -2,6 +2,7 @@
 
 #include <QByteArray>
 #include <QFile>
+#include <QStringList>
 
 #include <dlfcn.h>
 
@@ -39,16 +40,47 @@ ScreenSize openInkViewScreen()
     return {ScreenWidth(), ScreenHeight(), PanelHeight()};
 }
 
+/* Both of these are resolved rather than linked, for the reason above and one
+ * more: they are called during startup, before anything has drawn, so a symbol
+ * this firmware does not export takes the app down at the point where it looks
+ * as if it never ran at all. Neither answer is load-bearing — without a font
+ * name Qt picks its own, and without a language the launcher tile is English —
+ * so a missing one costs a log line and nothing else. */
 QString inkViewFontFamily()
 {
-    const char *family = iv_get_default_font(FONT_FAMILY);
+    const auto defaultFont = resolve<char *(*)(int)>("iv_get_default_font");
+    if (defaultFont == nullptr)
+        return QString();
+    const char *family = defaultFont(FONT_FAMILY);
     return family != nullptr ? QString::fromUtf8(family) : QString();
 }
 
 QString inkViewLang()
 {
-    const char *lang = currentLang();
-    return lang != nullptr ? QString::fromUtf8(lang) : QString();
+    const auto lang = resolve<const char *(*)()>("currentLang");
+    if (lang == nullptr)
+        return QString();
+    const char *value = lang();
+    return value != nullptr ? QString::fromUtf8(value) : QString();
+}
+
+QString inkViewDeviceInfo()
+{
+    static const QString info = [] {
+        QStringList parts;
+        const char *names[] = {"GetDeviceModel", "GetHardwareType",
+                               "GetSoftwareVersion"};
+        for (const char *name : names) {
+            const auto fn = resolve<char *(*)()>(name);
+            if (fn == nullptr)
+                continue;
+            const char *value = fn();
+            if (value != nullptr && *value != '\0')
+                parts += QString::fromUtf8(value);
+        }
+        return parts.join(QLatin1Char(' '));
+    }();
+    return info;
 }
 
 /* Opening a book is the firmware's own job: OpenBook looks up the handler for

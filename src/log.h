@@ -31,6 +31,18 @@ void pb_log(const char *fmt, ...)
 #endif
     ;
 
+/* Names what the process is busy with, for the crash line below to quote. Kept
+ * in memory and never written on its own — the app marks its startup steps
+ * here whether or not the build prints them. */
+void pb_log_stage(const char *stage);
+
+/* Turns a death by signal into a line. A qFatal writes one and a SIGSEGV
+ * writes nothing, so on a reader with no console the two look identical: the
+ * app is gone and the log simply stops. Installed by the app and the daemon;
+ * SIGKILL is still beyond reach, which is exactly what makes the difference
+ * worth recording. */
+void pb_log_install_crash_handler(void);
+
 #ifdef __cplusplus
 }
 #endif

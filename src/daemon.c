@@ -156,6 +156,11 @@ int run_daemon(void)
         pb_log("daemon: cannot open %s", stats_db_path());
         return 1;
     }
+    /* The daemon disappearing between app launches has always been read as
+     * SIGKILL, because nothing it could have said survived. A crash would look
+     * exactly the same from the log, and now it does not. */
+    pb_log_stage("daemon");
+    pb_log_install_crash_handler();
     pb_log("daemon: started (pid %d)", (int)getpid());
 
     daemon_note_start(t.stats);

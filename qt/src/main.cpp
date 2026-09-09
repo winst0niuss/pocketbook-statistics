@@ -1,7 +1,9 @@
 #include <cstring>
+#include <vector>
 
 extern "C" {
 #include "daemon.h"
+#include "log.h"
 }
 
 #include <QByteArray>
@@ -13,6 +15,7 @@ extern "C" {
 #include <QQuickWindow>
 #include <QString>
 #include <QUrl>
+#include <QtGlobal>
 
 #include "inkview_bridge.h"
 #include "installer.h"
@@ -28,12 +31,123 @@ constexpr const char *kQmlPath = "/ebrmain/qml";
 constexpr const char *kPlatformName = "pocketbook2";
 constexpr const char *kSceneUrl = "qrc:/main.qml";
 
+/* A build with a suffix on its version is a build somebody has been asked to
+ * test, and the question asked of it is always the same one: how far did it
+ * get. Marks through startup earn their lines there; in a release they would
+ * be half a dozen lines of "nothing wrong" a launch, drowning the week's
+ * signal. */
+bool verboseStartup()
+{
+    return std::strchr(APP_VERSION, '-') != nullptr;
+}
+
+void mark(const QString &stage)
+{
+    /* Recorded whether or not it is printed: a process killed by a signal
+     * prints nothing of its own, and the crash line the logger writes for it
+     * quotes this — which is the only thing that will say where it was. */
+    const QByteArray utf8 = stage.toUtf8();
+    pb_log_stage(utf8.constData());
+    if (verboseStartup())
+        updateLog(QStringLiteral("app: ") + stage);
+}
+
+/* Something worth knowing about the reader, as against a step of the startup:
+ * it says what was found, not how far we got, so it must never become the
+ * stage a crash is blamed on. */
+void note(const QString &text)
+{
+    if (verboseStartup())
+        updateLog(QStringLiteral("app: ") + text);
+}
+
+/* And the line that stands in every build, release included: it is written
+ * only when the startup found something wrong with the way this process was
+ * launched, so it costs a release nothing until the day it is the only thing
+ * that explains a reader that will not open the app. */
+void anomaly(const QString &text)
+{
+    updateLog(QStringLiteral("app: ") + text);
+}
+
+/* The plugin is named, and the name is ours to set — not the environment's.
+ * A PB634 (issue #10) starts this process with QT_QPA_PLATFORM already reading
+ * "pocketbook", a plugin Qt 6 there cannot load: it lists pocketbook2 as the
+ * only PocketBook one it has. Setting ours "only when empty" therefore left
+ * that value standing and the app died in the QGuiApplication constructor,
+ * which on a device with no console says nothing at all. So it is set every
+ * time, and what was inherited goes in the log of a build that is being tested.
+ *
+ * Called after InitInkview rather than before it: the value is inherited on
+ * that reader, but a firmware that sets it from inside InitInkview would
+ * otherwise overwrite ours, and this way neither can. */
 void selectPlatformPlugin()
 {
-    if (qEnvironmentVariableIsEmpty("QT_PLUGIN_PATH"))
+    const QByteArray inheritedPath = qgetenv("QT_PLUGIN_PATH");
+    const QByteArray inheritedPlatform = qgetenv("QT_QPA_PLATFORM");
+    note(QStringLiteral("inherited QT_PLUGIN_PATH=\"%1\" QT_QPA_PLATFORM=\"%2\"")
+             .arg(QString::fromLocal8Bit(inheritedPath),
+                  QString::fromLocal8Bit(inheritedPlatform)));
+
+    /* A name that is neither empty nor ours is the one failure this app has
+     * ever died of before drawing, and the reader it happens on belongs to
+     * somebody else — so it is logged in a release too, where the alternative
+     * is asking for a test build to learn what a single line already knows. */
+    if (!inheritedPlatform.isEmpty() && inheritedPlatform != QByteArray(kPlatformName))
+        anomaly(QStringLiteral("overriding inherited QT_QPA_PLATFORM=\"%1\"")
+                    .arg(QString::fromLocal8Bit(inheritedPlatform)));
+
+    /* The path is left alone where the firmware set one: Qt found pocketbook2
+     * on the reader that broke, so whatever it points at is working. The name
+     * is not left alone, for the reason above. */
+    if (inheritedPath.isEmpty())
         qputenv("QT_PLUGIN_PATH", QByteArray(kPluginPath));
-    if (qEnvironmentVariableIsEmpty("QT_QPA_PLATFORM"))
-        qputenv("QT_QPA_PLATFORM", QByteArray(kPlatformName));
+    qputenv("QT_QPA_PLATFORM", QByteArray(kPlatformName));
+}
+
+/* Qt reads the platform name from the command line before it reads the
+ * environment, so a launcher passing -platform outranks the qputenv above and
+ * our name never gets a look. Nothing on a PocketBook is known to pass one —
+ * but the reader that broke got its name through a channel nobody had thought
+ * to check either, and an argument that never reaches QGuiApplication cannot
+ * outrank the plugin this app needs. Everything else is handed on untouched;
+ * the array has to outlive the application object, which keeps a pointer to
+ * it. Returns the new argc. */
+int dropPlatformArgs(int argc, char **argv, std::vector<char *> &kept)
+{
+    for (int i = 0; i < argc; i++) {
+        char *arg = argv[i];
+        if (std::strcmp(arg, "-platform") == 0
+            || std::strcmp(arg, "--platform") == 0) {
+            i++; /* and the name that follows it */
+            continue;
+        }
+        if (std::strncmp(arg, "-platform=", 10) == 0
+            || std::strncmp(arg, "--platform=", 11) == 0)
+            continue;
+        kept.push_back(arg);
+    }
+    kept.push_back(nullptr);
+    return static_cast<int>(kept.size()) - 1;
+}
+
+/* Qt writes its own diagnostics to stderr, and this device has none: a QML
+ * error is printed where nobody can read it, and the app then closes itself
+ * with no explanation anywhere. Route the warnings into app.log for the whole
+ * of startup — the QML scene is not the only thing that can fail there, and a
+ * platform plugin that will not load is a qFatal in the QGuiApplication
+ * constructor, which is to say the last thing this process ever does. */
+void logQtMessage(QtMsgType type, const QMessageLogContext &, const QString &text)
+{
+    if (type == QtDebugMsg || type == QtInfoMsg)
+        return;
+    /* Every launch on every reader prints this one: the firmware leaves the
+     * locale unset, Qt notices that C is not UTF-8 and switches to C.UTF-8 by
+     * itself. Four lines a launch of something already dealt with is exactly
+     * the noise this log cannot afford. */
+    if (text.startsWith(QLatin1String("Detected locale")))
+        return;
+    updateLog(QStringLiteral("qt: ") + text);
 }
 
 } // namespace
@@ -44,13 +158,35 @@ int main(int argc, char *argv[])
     if (argc > 1 && std::strcmp(argv[1], "--daemon") == 0)
         return run_daemon();
 
-    selectPlatformPlugin();
+    /* Before anything else, and before any Qt call: on a firmware this was not
+     * built against, the process can die at the first missing symbol, and a
+     * start line written later would never be reached — leaving a report with
+     * no log at all indistinguishable from one where the app never ran. The Qt
+     * the reader supplies is half of that answer, so it goes in the same line;
+     * qVersion() is the runtime's, not the 6.8.2 this was compiled against. */
+    updateLog(QStringLiteral("app: start, version " APP_VERSION ", Qt %1")
+                  .arg(QString::fromLatin1(qVersion())));
+    pb_log_install_crash_handler();
+
+    /* From here to the scene, everything Qt has to say goes into the log. */
+    QtMessageHandler previous = qInstallMessageHandler(logQtMessage);
+
     QCoreApplication::setSetuidAllowed(true);
 
     const ScreenSize screen = openInkViewScreen();
+    /* The layout is built from these three numbers and every report about a
+     * reader nobody here owns begins with which one it is, so the line carries
+     * both. The device names itself only after InitInkview. */
+    const QString device = inkViewDeviceInfo();
+    updateLog(QStringLiteral("app: %1screen %2x%3, panel %4")
+                  .arg(device.isEmpty() ? QString() : device + QStringLiteral(", "))
+                  .arg(screen.width).arg(screen.height).arg(screen.panelHeight));
+
+    selectPlatformPlugin();
 
     // Register the launcher icon on first run (idempotent, no-op afterwards).
     ensureRegistered();
+    mark(QStringLiteral("launcher registered"));
 
     /* Compiling the QML takes ~3 s of the 3.5 s this app needs to appear, and
      * it happens on every launch: Qt disk-caches compiled QML, but not when it
@@ -66,22 +202,40 @@ int main(int argc, char *argv[])
 
     QQuickWindow::setGraphicsApi(QSGRendererInterface::Software);
 
-    QGuiApplication app(argc, argv);
-    updateLog(QStringLiteral("app: start, version " APP_VERSION));
+    /* How the firmware starts us is the one thing a log of a startup that dies
+     * before drawing cannot reconstruct afterwards. */
+    if (verboseStartup()) {
+        QString line;
+        for (int i = 0; i < argc; i++)
+            line += QLatin1Char(' ') + QString::fromLocal8Bit(argv[i]);
+        note(QStringLiteral("argv:") + line);
+    }
+
+    std::vector<char *> args;
+    int count = dropPlatformArgs(argc, argv, args);
+    if (count != argc)
+        anomaly(QStringLiteral("dropped -platform from the command line"));
+
+    QGuiApplication app(count, args.data());
+    mark(QStringLiteral("Qt up on ") + QGuiApplication::platformName());
 
     const QString fontFamily = inkViewFontFamily();
     if (!fontFamily.isEmpty())
         QGuiApplication::setFont(QFont(fontFamily));
+    mark(QStringLiteral("font ") + (fontFamily.isEmpty() ? QStringLiteral("(Qt default)")
+                                                         : fontFamily));
 
     StatsBridge stats;
     Updater updater;
     Shim shim;
+    mark(QStringLiteral("bridges up"));
     /* An app update ships a new shim; nothing else would ever install it. */
     shim.refresh();
     /* And on a device that has never had one, put it in: nothing of ours starts
      * at boot, so without it the day is measured only while the app happens to
      * be open. */
     shim.enableByDefault();
+    mark(QStringLiteral("shim checked"));
     spawn_daemon(QGuiApplication::applicationFilePath().toUtf8().constData());
 
     QQmlApplicationEngine engine;
@@ -95,13 +249,26 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty(QStringLiteral("screenH"), screen.height);
     engine.rootContext()->setContextProperty(QStringLiteral("panelH"), screen.panelHeight);
 
+    mark(QStringLiteral("loading scene"));
     engine.load(QUrl(QString::fromUtf8(kSceneUrl)));
     if (engine.rootObjects().isEmpty()) {
         /* The scene failed to instantiate — a QML mistake the lint gate let
-         * through. There is no console on this device, so without this line
-         * the app simply never opens and says nothing. */
+         * through, or a firmware whose com.pocketbook.controls is not the one
+         * this was written against. There is no console on this device, so
+         * without the handler above the app simply never opens and says
+         * nothing; the lines before this one name the type that failed. */
         updateLog(QStringLiteral("app: QML scene is empty, exiting"));
         return 1;
     }
+    /* Off again once the scene stands: what Qt has to say after that is noise,
+     * and the log is 64 KB for a week. */
+    qInstallMessageHandler(previous);
+    /* The size the scene came out at, against the screen reported above: a
+     * layout built for another reader's geometry is a thing the log can show
+     * without anyone having to photograph it. */
+    const QObject *root = engine.rootObjects().constFirst();
+    mark(QStringLiteral("scene up %1x%2")
+             .arg(root->property("width").toInt())
+             .arg(root->property("height").toInt()));
     return app.exec();
 }

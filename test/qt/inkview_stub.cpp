@@ -44,6 +44,11 @@ QString inkViewLang()
     return InkViewStub::lang;
 }
 
+QString inkViewDeviceInfo()
+{
+    return QStringLiteral("PB629 EVE 6.3.1");
+}
+
 bool inkViewOpenBook(const QString &path)
 {
     InkViewStub::openedBooks.append(path);

@@ -14,6 +14,11 @@ ScreenSize openInkViewScreen();
 QString inkViewFontFamily();
 QString inkViewLang(); /* e.g. "de", "en" */
 
+/* Model, hardware and firmware version as the reader reports them, for the one
+ * line of the log that an issue about an unknown device stands on. Empty where
+ * the firmware exports none of the three; asked once, since it cannot change. */
+QString inkViewDeviceInfo();
+
 /* Hands `path` to whichever reader the firmware would open it with, as the
  * library screen does. False means the firmware exports no OpenBook at all —
  * anything past that point is the firmware's business, not ours. */
