@@ -12,7 +12,6 @@ extern "C" {
 #include <QQmlContext>
 #include <QQuickWindow>
 #include <QString>
-#include <QStringList>
 #include <QUrl>
 #include <QtGlobal>
 
@@ -46,59 +45,20 @@ void mark(const QString &stage)
         updateLog(QStringLiteral("app: ") + stage);
 }
 
-/* The QPA plugin is loaded by name, and a name this firmware does not carry is
- * a qFatal inside the QGuiApplication constructor — on a device with no console
- * the app dies there having said nothing, which looks exactly like never having
- * been started. So ask the directory first: what is in it is what can be
- * loaded. */
-QByteArray choosePlatform(const QString &pluginPath)
-{
-    const QDir dir(pluginPath + QStringLiteral("/platforms"));
-    QStringList names;
-    const QStringList files = dir.entryList({QStringLiteral("lib*.so")}, QDir::Files);
-    for (const QString &file : files)
-        names += file.mid(3, file.size() - 6);
-
-    /* An empty listing is a directory we could not read, not a plugin that is
-     * missing, and the difference matters: every reader this has run on so far
-     * answered to pocketbook2, so guessing again on no evidence would break a
-     * working device to help a broken one. */
-    const QString preferred = QString::fromLatin1(kPlatformName);
-    if (names.isEmpty() || names.contains(preferred))
-        return QByteArray(kPlatformName);
-
-    QByteArray chosen;
-    for (const QString &name : names) {
-        if (name.startsWith(QLatin1String("pocketbook"))) {
-            chosen = name.toUtf8();
-            break;
-        }
-    }
-    /* Not a mark: a reader that does not have the plugin this was built for is
-     * the whole report, and it is worth a line in any build. */
-    updateLog(QStringLiteral("app: no %1 platform plugin, found [%2], using %3")
-                  .arg(preferred, names.join(QStringLiteral(", ")),
-                       chosen.isEmpty() ? QStringLiteral("Qt's own default")
-                                        : QString::fromUtf8(chosen)));
-    return chosen;
-}
-
+/* The plugin is named, not looked for. A build that read
+ * `<QT_PLUGIN_PATH>/platforms` and picked from what it found asked a PB634 for
+ * "pocketbook" and died: that directory held a name Qt 6 will not load, while
+ * the pocketbook2 plugin it does load came from a search path of Qt's own —
+ * so the listing is not an inventory of what can be loaded, and a guess built
+ * on it replaces a name that works with one that does not. Qt names the
+ * alternatives itself when it fails, and that message now reaches the log,
+ * which is all a reader that needs a different name has to say. */
 void selectPlatformPlugin()
 {
-    QByteArray pluginPath = qgetenv("QT_PLUGIN_PATH");
-    if (pluginPath.isEmpty()) {
-        pluginPath = QByteArray(kPluginPath);
-        qputenv("QT_PLUGIN_PATH", pluginPath);
-    }
-    if (!qEnvironmentVariableIsEmpty("QT_QPA_PLATFORM"))
-        return;
-
-    /* Only the first entry of a multi-path list is looked in; on this firmware
-     * there is never more than the one just put there. */
-    const QByteArray platform = choosePlatform(
-        QString::fromLocal8Bit(pluginPath).section(QLatin1Char(':'), 0, 0));
-    if (!platform.isEmpty())
-        qputenv("QT_QPA_PLATFORM", platform);
+    if (qEnvironmentVariableIsEmpty("QT_PLUGIN_PATH"))
+        qputenv("QT_PLUGIN_PATH", QByteArray(kPluginPath));
+    if (qEnvironmentVariableIsEmpty("QT_QPA_PLATFORM"))
+        qputenv("QT_QPA_PLATFORM", QByteArray(kPlatformName));
 }
 
 /* Qt writes its own diagnostics to stderr, and this device has none: a QML
@@ -110,6 +70,12 @@ void selectPlatformPlugin()
 void logQtMessage(QtMsgType type, const QMessageLogContext &, const QString &text)
 {
     if (type == QtDebugMsg || type == QtInfoMsg)
+        return;
+    /* Every launch on every reader prints this one: the firmware leaves the
+     * locale unset, Qt notices that C is not UTF-8 and switches to C.UTF-8 by
+     * itself. Four lines a launch of something already dealt with is exactly
+     * the noise this log cannot afford. */
+    if (text.startsWith(QLatin1String("Detected locale")))
         return;
     updateLog(QStringLiteral("qt: ") + text);
 }
