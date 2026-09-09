@@ -61,6 +61,15 @@ void note(const QString &text)
         updateLog(QStringLiteral("app: ") + text);
 }
 
+/* And the line that stands in every build, release included: it is written
+ * only when the startup found something wrong with the way this process was
+ * launched, so it costs a release nothing until the day it is the only thing
+ * that explains a reader that will not open the app. */
+void anomaly(const QString &text)
+{
+    updateLog(QStringLiteral("app: ") + text);
+}
+
 /* The plugin is named, and the name is ours to set — not the environment's.
  * A PB634 (issue #10) starts this process with QT_QPA_PLATFORM already reading
  * "pocketbook", a plugin Qt 6 there cannot load: it lists pocketbook2 as the
@@ -79,6 +88,14 @@ void selectPlatformPlugin()
     note(QStringLiteral("inherited QT_PLUGIN_PATH=\"%1\" QT_QPA_PLATFORM=\"%2\"")
              .arg(QString::fromLocal8Bit(inheritedPath),
                   QString::fromLocal8Bit(inheritedPlatform)));
+
+    /* A name that is neither empty nor ours is the one failure this app has
+     * ever died of before drawing, and the reader it happens on belongs to
+     * somebody else — so it is logged in a release too, where the alternative
+     * is asking for a test build to learn what a single line already knows. */
+    if (!inheritedPlatform.isEmpty() && inheritedPlatform != QByteArray(kPlatformName))
+        anomaly(QStringLiteral("overriding inherited QT_QPA_PLATFORM=\"%1\"")
+                    .arg(QString::fromLocal8Bit(inheritedPlatform)));
 
     /* The path is left alone where the firmware set one: Qt found pocketbook2
      * on the reader that broke, so whatever it points at is working. The name
@@ -197,7 +214,7 @@ int main(int argc, char *argv[])
     std::vector<char *> args;
     int count = dropPlatformArgs(argc, argv, args);
     if (count != argc)
-        note(QStringLiteral("dropped -platform from the command line"));
+        anomaly(QStringLiteral("dropped -platform from the command line"));
 
     QGuiApplication app(count, args.data());
     mark(QStringLiteral("Qt up on ") + QGuiApplication::platformName());
