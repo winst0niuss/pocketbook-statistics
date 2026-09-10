@@ -7,12 +7,15 @@ This file holds rules only. Where to look for the rest:
 - **`docs/DECISIONS.md`** — why each rule exists: the incident, the measurement, what was tried and failed. Same headings as here. Read the matching section before changing or relaxing a rule.
 - **`docs/CHANGELOG.md`** — what each release changed and why.
 - **`docs/DEVICE-DATA.md`** — what the firmware stores (both databases, field coverage on a real device, the hash that joins them) and what it does not. Check it before designing a metric.
+- **`docs/STATS-PLAN.md`** — which metrics the app should show, each with its data source, and the ones that cannot be built. Read it before proposing a new metric.
+- **`BUILDING.md`** — the build for a human: prerequisites, project layout, adding a translation.
 
 ## Environment quirks
 
 - The working directory still has its old name, `pocketbook-readtrack `, **with a trailing space**. Always quote paths. The project and its GitHub repo are `pocketbook-statistics`.
 - Git repo on `main`, remote `origin` → `winst0niuss/pocketbook-statistics`. History starts at 2.0.0; nothing earlier was kept.
 - No Docker, cmake or Qt on this machine: `make qt` and `make qt-test` run only in CI.
+- `PLAN.md` and `todo.md` are the owner's working notes, git-ignored — not project documentation or a spec. Stage explicit paths; `git add -A` has swept one in before.
 
 ## Commands
 
